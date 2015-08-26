@@ -6,6 +6,7 @@ host=$(mktemp)
 conf=$(mktemp)
 
 for site in ../site-* ; do
+  site=$(basename $site)
   name=$(echo $site | cut -f2 -d '-')
 
   echo "Processing: ${name}"
@@ -32,3 +33,7 @@ done
 
 mv $host vvv-hosts
 sudo mv $conf $TARGET
+sudo chown root:root $TARGET
+sudo chmod 644 $TARGET
+
+sudo service nginx restart
