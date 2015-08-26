@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [[ $(hostname) != "vvv" ]] ; then
+  echo "You must run this inside the VM, not on the host!"
+  exit 1
+fi
+
 TARGET=/etc/nginx/custom-sites/speartail.conf
 
 host=$(mktemp)
