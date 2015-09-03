@@ -55,6 +55,7 @@ mv $host vvv-hosts
 # sql
 echo 'FLUSH PRIVILEGES;' >> $sql
 sudo mv $sql $SQLINIT
+mysql < $SQLINIT
 
 # nginx
 sudo mv $conf $NGINX
