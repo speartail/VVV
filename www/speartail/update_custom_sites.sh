@@ -62,3 +62,4 @@ sudo mv $conf $NGINX
 sudo chown root:root $NGINX
 sudo chmod 644 $NGINX
 sudo service nginx restart
+
