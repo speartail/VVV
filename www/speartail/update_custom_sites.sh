@@ -7,12 +7,13 @@ fi
 
 SQLINIT=/srv/database/init-custom.sql
 NGINX=/etc/nginx/custom-sites/speartail.conf
+ROOT=/srv/www
 
 host=$(mktemp)
 conf=$(mktemp)
 sql=$(mktemp)
 
-for site in ../site-* ; do
+for site in ${ROOT}/site-* ; do
   site=$(basename $site)
   name=$(echo $site | cut -f2 -d '-')
   fqdn="${name}.wordpress.dev"
@@ -41,7 +42,7 @@ server {
     listen       80;
     listen       443 ssl;
     server_name  ${fqdn} *.${fqdn} ~^${name}\.wordpress\.\d+\.\d+\.\d+\.\d+\.xip\.io$;
-    root         /srv/www/${site};
+    root         ${ROOT}/${site};
     include      /etc/nginx/nginx-wp-common.conf;
 }
 
@@ -62,4 +63,3 @@ sudo mv $conf $NGINX
 sudo chown root:root $NGINX
 sudo chmod 644 $NGINX
 sudo service nginx restart
-
