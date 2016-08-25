@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euo pipefail
 
 if [[ $(hostname) != "vvv" ]] ; then
   echo "You must run this inside the VM, not on the host!"
