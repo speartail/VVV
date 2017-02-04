@@ -1,19 +1,23 @@
+# frozen_string_literal: true
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+PREFER_VBOX = true
+
 vagrant_dir = File.expand_path(File.dirname(__FILE__))
 
-Vagrant.configure("2") do |config|
-
+Vagrant.configure('2') do |config|
   # Store the current version of Vagrant for use in conditionals when dealing
   # with possible backward compatible issues.
   vagrant_version = Vagrant::VERSION.sub(/^v/, '')
 
   # Configuration options for the VirtualBox provider.
-  config.vm.provider :virtualbox do |v|
-    v.customize ["modifyvm", :id, "--memory", 1024]
-    v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-    v.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+  if PREFER_VBOX
+    config.vm.provider :virtualbox do |v|
+      v.customize ['modifyvm', :id, '--memory', 1024]
+      v.customize ['modifyvm', :id, '--natdnshostresolver1', 'on']
+      v.customize ['modifyvm', :id, '--natdnsproxy1', 'on']
+    end
   end
 
   # Configuration options for the Parallels provider.
@@ -34,14 +38,14 @@ Vagrant.configure("2") do |config|
   # This box is provided by Ubuntu vagrantcloud.com and is a nicely sized (332MB)
   # box containing the Ubuntu 14.04 Trusty 64 bit release. Once this box is downloaded
   # to your host computer, it is cached for future use under the specified box name.
-  config.vm.box = "ubuntu/trusty64"
+  config.vm.box = 'ubuntu/trusty64'
 
   # The Parallels Provider uses a different naming scheme.
-  config.vm.provider :parallels do |v, override|
-    override.vm.box = "parallels/ubuntu-14.04"
+  config.vm.provider :parallels do |_v, override|
+    override.vm.box = 'parallels/ubuntu-14.04'
   end
 
-  config.vm.hostname = "vvv"
+  config.vm.hostname = 'vvv'
 
   # Local Machine Hosts
   #
@@ -86,7 +90,7 @@ Vagrant.configure("2") do |config|
   # should be changed. If more than one VM is running through VirtualBox, including other
   # Vagrant machines, different subnets should be used for each.
   #
-  config.vm.network :private_network, ip: "192.168.50.4"
+  config.vm.network :private_network, ip: '192.168.50.4'
 
   # Public Network (disabled)
   #
@@ -127,7 +131,7 @@ Vagrant.configure("2") do |config|
   # a mapped directory inside the VM will be created that contains these files.
   # This directory is used to maintain default database scripts as well as backed
   # up mysql dumps (SQL files) that are to be imported automatically on vagrant up
-  config.vm.synced_folder "database/", "/srv/database"
+  config.vm.synced_folder 'database/', '/srv/database'
 
   # If the mysql_upgrade_info file from a previous persistent database mapping is detected,
   # we'll continue to map that directory as /var/lib/mysql inside the virtual machine. Once
@@ -135,18 +139,18 @@ Vagrant.configure("2") do |config|
   # is now available inside the virtual machine to backup all databases for future use. This
   # command is automatically issued on halt, suspend, and destroy if the vagrant-triggers
   # plugin is installed.
-  if File.exists?(File.join(vagrant_dir,'database/data/mysql_upgrade_info')) then
-    if vagrant_version >= "1.3.0"
-      config.vm.synced_folder "database/data/", "/var/lib/mysql", :mount_options => [ "dmode=777", "fmode=777" ]
+  if File.exist?(File.join(vagrant_dir, 'database/data/mysql_upgrade_info'))
+    if vagrant_version >= '1.3.0'
+      config.vm.synced_folder 'database/data/', '/var/lib/mysql', mount_options: ['dmode=777', 'fmode=777']
     else
-      config.vm.synced_folder "database/data/", "/var/lib/mysql", :extra => 'dmode=777,fmode=777'
+      config.vm.synced_folder 'database/data/', '/var/lib/mysql', extra: 'dmode=777,fmode=777'
     end
 
     # The Parallels Provider does not understand "dmode"/"fmode" in the "mount_options" as
     # those are specific to Virtualbox. The folder is therefore overridden with one that
     # uses corresponding Parallels mount options.
-    config.vm.provider :parallels do |v, override|
-      override.vm.synced_folder "database/data/", "/var/lib/mysql", :mount_options => []
+    config.vm.provider :parallels do |_v, override|
+      override.vm.synced_folder 'database/data/', '/var/lib/mysql', mount_options: []
     end
   end
 
@@ -156,30 +160,30 @@ Vagrant.configure("2") do |config|
   # a mapped directory inside the VM will be created that contains these files.
   # This directory is currently used to maintain various config files for php and
   # nginx as well as any pre-existing database files.
-  config.vm.synced_folder "config/", "/srv/config"
+  config.vm.synced_folder 'config/', '/srv/config'
 
   # /srv/log/
   #
   # If a log directory exists in the same directory as your Vagrantfile, a mapped
   # directory inside the VM will be created for some generated log files.
-  config.vm.synced_folder "log/", "/srv/log", :owner => "www-data"
+  config.vm.synced_folder 'log/', '/srv/log', owner: 'www-data'
 
   # /srv/www/
   #
   # If a www directory exists in the same directory as your Vagrantfile, a mapped directory
   # inside the VM will be created that acts as the default location for nginx sites. Put all
   # of your project files here that you want to access through the web server
-  if vagrant_version >= "1.3.0"
-    config.vm.synced_folder "www/", "/srv/www/", :owner => "www-data", :mount_options => [ "dmode=775", "fmode=774" ]
+  if vagrant_version >= '1.3.0'
+    config.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', mount_options: ['dmode=775', 'fmode=774']
   else
-    config.vm.synced_folder "www/", "/srv/www/", :owner => "www-data", :extra => 'dmode=775,fmode=774'
+    config.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', extra: 'dmode=775,fmode=774'
   end
 
   # The Parallels Provider does not understand "dmode"/"fmode" in the "mount_options" as
   # those are specific to Virtualbox. The folder is therefore overridden with one that
   # uses corresponding Parallels mount options.
-  config.vm.provider :parallels do |v, override|
-    override.vm.synced_folder "www/", "/srv/www/", :owner => "www-data", :mount_options => []
+  config.vm.provider :parallels do |_v, override|
+    override.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', mount_options: []
   end
 
   # Customfile - POSSIBLY UNSTABLE
@@ -190,8 +194,8 @@ Vagrant.configure("2") do |config|
   #
   # Note that if you find yourself using a Customfile for anything crazy or specifying
   # different provisioning, then you may want to consider a new Vagrantfile entirely.
-  if File.exists?(File.join(vagrant_dir,'Customfile')) then
-    eval(IO.read(File.join(vagrant_dir,'Customfile')), binding)
+  if File.exist?(File.join(vagrant_dir, 'Customfile'))
+    eval(IO.read(File.join(vagrant_dir, 'Customfile')), binding)
   end
 
   # Provisioning
@@ -201,8 +205,8 @@ Vagrant.configure("2") do |config|
   # provison-pre.sh acts as a pre-hook to our default provisioning script. Anything that
   # should run before the shell commands laid out in provision.sh (or your provision-custom.sh
   # file) should go in this script. If it does not exist, no extra provisioning will run.
-  if File.exists?(File.join(vagrant_dir,'provision','provision-pre.sh')) then
-    config.vm.provision :shell, :path => File.join( "provision", "provision-pre.sh" )
+  if File.exist?(File.join(vagrant_dir, 'provision', 'provision-pre.sh'))
+    config.vm.provision :shell, path: File.join('provision', 'provision-pre.sh')
   end
 
   # provision.sh or provision-custom.sh
@@ -211,25 +215,25 @@ Vagrant.configure("2") do |config|
   # provision directory. If it is detected that a provision-custom.sh script has been
   # created, that is run as a replacement. This is an opportunity to replace the entirety
   # of the provisioning provided by default.
-  if File.exists?(File.join(vagrant_dir,'provision','provision-custom.sh')) then
-    config.vm.provision :shell, :path => File.join( "provision", "provision-custom.sh" )
+  if File.exist?(File.join(vagrant_dir, 'provision', 'provision-custom.sh'))
+    config.vm.provision :shell, path: File.join('provision', 'provision-custom.sh')
   else
-    config.vm.provision :shell, :path => File.join( "provision", "provision.sh" )
+    config.vm.provision :shell, path: File.join('provision', 'provision.sh')
   end
 
   # provision-post.sh acts as a post-hook to the default provisioning. Anything that should
   # run after the shell commands laid out in provision.sh or provision-custom.sh should be
   # put into this file. This provides a good opportunity to install additional packages
   # without having to replace the entire default provisioning script.
-  if File.exists?(File.join(vagrant_dir,'provision','provision-post.sh')) then
-    config.vm.provision :shell, :path => File.join( "provision", "provision-post.sh" )
+  if File.exist?(File.join(vagrant_dir, 'provision', 'provision-post.sh'))
+    config.vm.provision :shell, path: File.join('provision', 'provision-post.sh')
   end
 
   # Always start MySQL on boot, even when not running the full provisioner
   # (run: "always" support added in 1.6.0)
-  if vagrant_version >= "1.6.0"
-    config.vm.provision :shell, inline: "sudo service mysql restart", run: "always"
-    config.vm.provision :shell, inline: "sudo service nginx restart", run: "always"
+  if vagrant_version >= '1.6.0'
+    config.vm.provision :shell, inline: 'sudo service mysql restart', run: 'always'
+    config.vm.provision :shell, inline: 'sudo service nginx restart', run: 'always'
   end
 
   # Vagrant Triggers
@@ -242,13 +246,13 @@ Vagrant.configure("2") do |config|
   # to create backups of all current databases. This can be overridden with custom
   # scripting. See the individual files in config/homebin/ for details.
   if defined? VagrantPlugins::Triggers
-    config.trigger.before :halt, :stdout => true do
+    config.trigger.before :halt, stdout: true do
       run "vagrant ssh -c 'vagrant_halt'"
     end
-    config.trigger.before :suspend, :stdout => true do
+    config.trigger.before :suspend, stdout: true do
       run "vagrant ssh -c 'vagrant_suspend'"
     end
-    config.trigger.before :destroy, :stdout => true do
+    config.trigger.before :destroy, stdout: true do
       run "vagrant ssh -c 'vagrant_destroy'"
     end
   end
