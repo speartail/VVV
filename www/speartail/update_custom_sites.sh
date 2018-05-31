@@ -18,7 +18,7 @@ sql=$(mktemp)
 for site in ${ROOT}/site-* ; do
   site=$(basename $site)
   name=$(echo $site | cut -f2 -d '-')
-  fqdn="${name}.wordpress.dev"
+  fqdn="${name}.wordpress.test"
 
   echo "Processing: ${name}"
 
