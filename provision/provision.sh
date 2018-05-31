@@ -665,4 +665,4 @@ if [[ $ping_result == "Connected" ]]; then
 else
 	echo "No external network available. Package installation and maintenance skipped."
 fi
-echo "For further setup instructions, visit http://vvv.dev"
+echo "For further setup instructions, visit http://vvv.test"

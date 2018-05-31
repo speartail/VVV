@@ -55,7 +55,7 @@
 ## 0.9
 * **Possible Annoying:** Use `precise32` for the Vagrant box name for better cross project box caching.
     * **Note:** This will probably cause a new Vagrant box to download. Use `vagrant box remove std-precise32` after a `vagrant destroy` to remove the old one and start with this.
-* **Possible Breaking:** Change VM hostname to `vvv.dev`
+* **Possible Breaking:** Change VM hostname to `vvv.test`
     * **Note:** If you had anything setup to rely on the hostname of precise32-dev, this may break.
 * **Possible Breaking:** Change MySQL root password to `root`
 	* **Note:** If anything is setup to rely on the previous password of `blank`, this  may break.
