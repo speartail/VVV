@@ -2,29 +2,57 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-PREFER_VBOX = true
+PROVIDERS = %i(vbox libvirt parallels)
+PROVIDER = :libvirt
 
 vagrant_dir = File.expand_path(File.dirname(__FILE__))
+
+MEMORY = 1024
 
 Vagrant.configure('2') do |config|
   # Store the current version of Vagrant for use in conditionals when dealing
   # with possible backward compatible issues.
   vagrant_version = Vagrant::VERSION.sub(/^v/, '')
 
-  # Configuration options for the VirtualBox provider.
-  if PREFER_VBOX
+  case PROVIDER
+  when :vbox
+    FS = 'nfs' # don't think this is right...
+    # Configuration options for the VirtualBox provider.
     config.vm.provider :virtualbox do |v|
-      v.customize ['modifyvm', :id, '--memory', 1024]
+
+      v.customize ['modifyvm', :id, '--memory', MEMORY]
       v.customize ['modifyvm', :id, '--natdnshostresolver1', 'on']
       v.customize ['modifyvm', :id, '--natdnsproxy1', 'on']
     end
-  end
+  when :libvirt
+    FS = '9p'
+    # Use QEMU session instead of system connection
+    config.vm.provider :libvirt do |v|
 
-  # Configuration options for the Parallels provider.
-  config.vm.provider :parallels do |v|
-    v.update_guest_tools = true
-    v.optimize_power_consumption = false
-    v.memory = 1024
+      v.qemu_use_session = true
+      v.uri = 'qemu:///session'
+      v.system_uri = 'qemu:///system'
+      v.storage_pool_path = ENV['HOME'] + '/.local/share/libvirt/images'
+      #v.management_network_device = 'virbr0'
+      #v.management_network_mode = 'nat'
+
+      v.machine_type = 'q35'
+      v.memory = MEMORY
+      v.nic_model_type = 'virtio'
+      v.video_type = 'virtio'
+
+      v.channel type: 'unix', target_name: 'org.qemu.guest_agent.0', target_type: 'virtio'
+      v.channel type: 'spicevmc', target_name: 'com.redhat.spice.0', target_type: 'virtio'
+    end
+  when :parallels
+    # Configuration options for the Parallels provider.
+    config.vm.provider :parallels do |v|
+      FS = 'unknown'
+
+      v.update_guest_tools = true
+      v.optimize_power_consumption = false
+      v.memory = MEMORY
+    end
   end
 
   # SSH Agent Forwarding
@@ -38,7 +66,8 @@ Vagrant.configure('2') do |config|
   # This box is provided by Ubuntu vagrantcloud.com and is a nicely sized (332MB)
   # box containing the Ubuntu 14.04 Trusty 64 bit release. Once this box is downloaded
   # to your host computer, it is cached for future use under the specified box name.
-  config.vm.box = 'ubuntu/trusty64'
+  # config.vm.box = 'generic/ubuntu1604'
+  config.vm.box = 'debian/jessie64'
 
   # The Parallels Provider uses a different naming scheme.
   config.vm.provider :parallels do |_v, override|
@@ -90,7 +119,7 @@ Vagrant.configure('2') do |config|
   # should be changed. If more than one VM is running through VirtualBox, including other
   # Vagrant machines, different subnets should be used for each.
   #
-  config.vm.network :private_network, ip: '192.168.50.4'
+  config.vm.network :private_network, ip: '192.168.201.4'
 
   # Public Network (disabled)
   #
@@ -124,6 +153,8 @@ Vagrant.configure('2') do |config|
   # machine versions. Think of it as two different ways to access the same file. When the
   # virtual machine is destroyed with `vagrant destroy`, your files will remain in your local
   # environment.
+  
+  config.vm.synced_folder '.', '/vagrant', disabled: true
 
   # /srv/database/
   #
@@ -131,7 +162,7 @@ Vagrant.configure('2') do |config|
   # a mapped directory inside the VM will be created that contains these files.
   # This directory is used to maintain default database scripts as well as backed
   # up mysql dumps (SQL files) that are to be imported automatically on vagrant up
-  config.vm.synced_folder 'database/', '/srv/database'
+  config.vm.synced_folder 'database/', '/srv/database', type: FS
 
   # If the mysql_upgrade_info file from a previous persistent database mapping is detected,
   # we'll continue to map that directory as /var/lib/mysql inside the virtual machine. Once
@@ -141,16 +172,16 @@ Vagrant.configure('2') do |config|
   # plugin is installed.
   if File.exist?(File.join(vagrant_dir, 'database/data/mysql_upgrade_info'))
     if vagrant_version >= '1.3.0'
-      config.vm.synced_folder 'database/data/', '/var/lib/mysql', mount_options: ['dmode=777', 'fmode=777']
+      config.vm.synced_folder 'database/data/', '/var/lib/mysql', mount_options: ['dmode=777', 'fmode=777'], type: FS
     else
-      config.vm.synced_folder 'database/data/', '/var/lib/mysql', extra: 'dmode=777,fmode=777'
+      config.vm.synced_folder 'database/data/', '/var/lib/mysql', extra: 'dmode=777,fmode=777', type: FS
     end
 
     # The Parallels Provider does not understand "dmode"/"fmode" in the "mount_options" as
     # those are specific to Virtualbox. The folder is therefore overridden with one that
     # uses corresponding Parallels mount options.
     config.vm.provider :parallels do |_v, override|
-      override.vm.synced_folder 'database/data/', '/var/lib/mysql', mount_options: []
+      override.vm.synced_folder 'database/data/', '/var/lib/mysql', mount_options: [], type: FS
     end
   end
 
@@ -160,13 +191,13 @@ Vagrant.configure('2') do |config|
   # a mapped directory inside the VM will be created that contains these files.
   # This directory is currently used to maintain various config files for php and
   # nginx as well as any pre-existing database files.
-  config.vm.synced_folder 'config/', '/srv/config'
+  config.vm.synced_folder 'config/', '/srv/config', type: FS
 
   # /srv/log/
   #
   # If a log directory exists in the same directory as your Vagrantfile, a mapped
   # directory inside the VM will be created for some generated log files.
-  config.vm.synced_folder 'log/', '/srv/log', owner: 'www-data'
+  config.vm.synced_folder 'log/', '/srv/log', owner: 'www-data', type: FS
 
   # /srv/www/
   #
@@ -174,16 +205,16 @@ Vagrant.configure('2') do |config|
   # inside the VM will be created that acts as the default location for nginx sites. Put all
   # of your project files here that you want to access through the web server
   if vagrant_version >= '1.3.0'
-    config.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', mount_options: ['dmode=775', 'fmode=774']
+    config.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', mount_options: ['dmode=775', 'fmode=774'], type: FS
   else
-    config.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', extra: 'dmode=775,fmode=774'
+    config.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', extra: 'dmode=775,fmode=774', type: FS
   end
 
   # The Parallels Provider does not understand "dmode"/"fmode" in the "mount_options" as
   # those are specific to Virtualbox. The folder is therefore overridden with one that
   # uses corresponding Parallels mount options.
   config.vm.provider :parallels do |_v, override|
-    override.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', mount_options: []
+    override.vm.synced_folder 'www/', '/srv/www/', owner: 'www-data', mount_options: [], type: FS
   end
 
   # Customfile - POSSIBLY UNSTABLE
