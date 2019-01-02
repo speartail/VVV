@@ -16,6 +16,7 @@ in stdenv.mkDerivation rec {
 
   nativeBuildInputs = [
     bundix
+    bundler
     vagrant
     wp-cli
   ];
