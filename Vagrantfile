@@ -76,6 +76,9 @@ Vagrant.configure('2') do |config|
 
   config.vm.hostname = 'vvv'
 
+  config.vm.define 'jessie' do |v|
+  end
+
   # Local Machine Hosts
   #
   # If the Vagrant plugin hostsupdater (https://github.com/cogitatio/vagrant-hostsupdater) is
