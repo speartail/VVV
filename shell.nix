@@ -1,22 +1,21 @@
 with import <nixpkgs> {};
 
 let
-  ruby = pkgs.ruby_2_4;
+  ruby = pkgs.ruby_2_5;
   bundler = pkgs.bundler.override { inherit ruby; };
 
 in stdenv.mkDerivation rec {
   name = "env";
   buildInputs = [
     libffi
-    # phantomjs2
-    # readline
-    # sqlite # needed by mailcatcher
-    # zlib
+    libsodium
+    libxml2
   ];
 
   nativeBuildInputs = [
     bundix
     bundler
+    phpPackages.composer
     vagrant
     wp-cli
   ];
