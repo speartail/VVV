@@ -10,6 +10,7 @@ in stdenv.mkDerivation rec {
     libffi
     libsodium
     libxml2
+    zlib
   ];
 
   nativeBuildInputs = [
