@@ -11,8 +11,8 @@ gem 'guard-shell'
 # gem 'wordmove'
 
 gem 'capistrano-git-submodule-strategy'
-gem 'capistrano', github: 'peterhoeg/capistrano', branch: 'nixos'
-gem 'capistrano-wp-deploy', github: 'peterhoeg/wp-deploy', branch: 'v2-branch'
+gem 'capistrano', git: 'git@github.com:peterhoeg/capistrano.git', branch: 'nixos'
+gem 'capistrano-wp-deploy', git: 'git@github.com:peterhoeg/wp-deploy.git', branch: 'v2-branch'
 #gem 'capistrano-wp-deploy', github: 'Mixd/wp-deploy', branch: 'v2-branch'
 #gem 'capistrano-wp-deploy', path: '~/src/active/wp-deploy'
 
