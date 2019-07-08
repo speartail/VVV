@@ -1,19 +1,13 @@
-with import <nixpkgs> {};
-
 let
-  ruby = pkgs.ruby_2_5;
-  bundler = pkgs.bundler.override { inherit ruby; };
+  pkgs = import <nixpkgs> {};
 
-in stdenv.mkDerivation rec {
-  name = "env";
-  buildInputs = [
+in pkgs.mkShell rec {
+  buildInputs = with pkgs; [
     libffi
     libsodium
     libxml2
     zlib
-  ];
 
-  nativeBuildInputs = [
     bundix
     bundler
     phpPackages.composer
