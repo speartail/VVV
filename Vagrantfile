@@ -4,6 +4,8 @@
 
 PREFER_VBOX = true
 
+MEMORY = 512
+
 vagrant_dir = File.expand_path(File.dirname(__FILE__))
 
 Vagrant.configure('2') do |config|
@@ -12,19 +14,17 @@ Vagrant.configure('2') do |config|
   vagrant_version = Vagrant::VERSION.sub(/^v/, '')
 
   # Configuration options for the VirtualBox provider.
-  if PREFER_VBOX
-    config.vm.provider :virtualbox do |v|
-      v.customize ['modifyvm', :id, '--memory', 1024]
-      v.customize ['modifyvm', :id, '--natdnshostresolver1', 'on']
-      v.customize ['modifyvm', :id, '--natdnsproxy1', 'on']
-    end
+  config.vm.provider :virtualbox do |v|
+    v.customize ['modifyvm', :id, '--memory', MEMORY]
+    v.customize ['modifyvm', :id, '--natdnshostresolver1', 'on']
+    v.customize ['modifyvm', :id, '--natdnsproxy1', 'on']
   end
 
   # Configuration options for the Parallels provider.
   config.vm.provider :parallels do |v|
     v.update_guest_tools = true
     v.optimize_power_consumption = false
-    v.memory = 1024
+    v.memory = MEMORY
   end
 
   # SSH Agent Forwarding
