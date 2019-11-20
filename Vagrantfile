@@ -371,6 +371,7 @@ Vagrant.configure("2") do |config|
     # Move the ubuntu-bionic-18.04-cloudimg-console.log file to log directory.
     v.customize ["modifyvm", :id, "--uartmode1", "file", File.join(vagrant_dir, "log/ubuntu-bionic-18.04-cloudimg-console.log")]
 
+    v.customize ["modifyvm", :id, "--chipset", "ich9"]
     v.customize ["modifyvm", :id, "--memory", vvv_config['vm_config']['memory']]
     v.customize ["modifyvm", :id, "--cpus", vvv_config['vm_config']['cores']]
     v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
