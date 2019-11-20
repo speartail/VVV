@@ -1,3 +1,4 @@
+# coding: utf-8
 # -*- mode: ruby -*-
 # vi: set ft=ruby ts=2 sw=2 et:
 Vagrant.require_version ">= 2.2.4"
