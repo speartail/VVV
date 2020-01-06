@@ -14,6 +14,7 @@ in pkgs.mkShell rec {
 
     bundix
     bundler
+    ruby
     mysql.client # needed for mysqldump which wp-cli needs
     phpPackages.composer
     vagrant
