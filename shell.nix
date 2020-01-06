@@ -13,7 +13,6 @@ in pkgs.mkShell rec {
     zlib
 
     bundix
-    bundler
     ruby
     mysql.client # needed for mysqldump which wp-cli needs
     phpPackages.composer
