@@ -1,0 +1,10 @@
+[Unit]
+Description=MailHog
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mailhog
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
