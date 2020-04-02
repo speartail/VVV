@@ -18,6 +18,8 @@
 #
 # Let's begin...
 
+. /srv/provision/lib.sh
+
 if [[ -f /srv/config/config.yml ]]; then
 	VVV_CONFIG=/srv/config/config.yml
 else
@@ -27,12 +29,12 @@ fi
 run_restore=$(shyaml get-value general.db_restore True 2> /dev/null < ${VVV_CONFIG})
 
 if [[ $run_restore == "False" ]]; then
-	echo " * Skipping DB import script, disabled via the VVV config file"
+	_header "Skipping DB import script, disabled via the VVV config file"
 	exit
 fi
 
 # Move into the newly mapped backups directory, where mysqldump(ed) SQL files are stored
-echo " * Starting MariaDB Database Import"
+_header "Starting MariaDB Database Import"
 # create the backup folder if it doesn't exist
 mkdir -p /srv/database/backups
 cd /srv/database/backups/
@@ -47,25 +49,24 @@ if [ "$sql_count" -gt 0 ]; then
     # get rid of the ./
     db_name=${pre_dot##./}
 
-    echo " * Creating the \`${db_name}\` database if it doesn't already exist, and granting the wp user access"
+    _msg "Creating \`${db_name}\` granting access"
     mysql -u root --password=root -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`"
     mysql -u root --password=root -e "GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO wp@localhost IDENTIFIED BY 'wp';"
 
     mysql_cmd="SHOW TABLES FROM \`${db_name}\`" # Required to support hypens in database names
     db_exist=$(mysql -u root -proot --skip-column-names -e "${mysql_cmd}")
     if [ "$?" != "0" ]; then
-      echo " * Error - Create \`${db_name}\` database via init-custom.sql before attempting import"
+      _error "Create \`${db_name}\` database via init-custom.sql before attempting import"
     else
       if [ "" == "${db_exist}" ]; then
-        echo "mysql -u root -proot \"${db_name}\" < \"${db_name}.sql\""
         mysql -u root -proot "${db_name}" < "${db_name}.sql"
-        echo " * Import of \`${db_name}\` successful"
+        _msg "Import of \`${db_name}\` successful"
       else
-        echo " * Skipped import of \`${db_name}\` - tables exist"
+        _msg "Skipped import of \`${db_name}\` - tables exist"
       fi
     fi
 	done
-	echo " * Databases imported"
+	_msg "Databases imported"
 else
-	echo " * No custom databases to import"
+	_msg "No custom databases to import"
 fi

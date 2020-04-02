@@ -9,10 +9,7 @@
 
 set -eEuo pipefail
 
-GREEN="\033[38;5;2m"
-RED="\033[38;5;9m"
-CRESET="\033[0m"
-PHP_VERSION=7.2
+. /srv/provision/lib.sh
 
 # Error out early if the VM version is wrong
 /srv/provision/vm-is-too-old.sh
@@ -94,91 +91,6 @@ apt_packages=(
   nodejs
 )
 
-_header() {
-  local msg="$1"
-
-  echo -e "${GREEN} * ${1}${CRESET}"
-}
-
-_msg() {
-  local msg="$1"
-
-  echo -e "${CRESET} ** ${msg}"
-}
-
-_error() {
-  local msg="$1"
-
-  echo -e "${RED} *** ERROR: ${1}${CRESET}"
-  exit 1
-}
-
-_rm() {
-  local path="$1"
-
-  rm -rf "$path"
-}
-
-_apt_add_repo() {
-  add-apt-repository -y "$1" &>/dev/null
-}
-
-_apt_update() {
-  apt-get update &>/dev/null
-}
-
-_apt_install() {
-  apt-get -y \
-    --allow-downgrades \
-    --allow-remove-essential \
-    --allow-change-held-packages \
-    --no-install-recommends \
-    --fix-missing \
-    --fix-broken \
-    -o Dpkg::Options::=--force-confdef \
-    -o Dpkg::Options::=--force-confnew \
-    install "$@"
-}
-
-_get() {
-  local source="$1"
-  local target="$2"
-
-  test -f "$target" && _rm "$target"
-
-  curl --silent -L "$source" \
-    -o "$target"
-}
-
-set_perms() {
-  chown -R vagrant:vagrant  /vagrant /usr/lib/node_modules/
-  chown -R vagrant:www-data /usr/local/bin /usr/local/src/composer
-  chmod -R g+w              /usr/local/bin /usr/local/src/composer
-  chmod -R +x /usr/local/bin/*
-}
-
-noroot() {
-  sudo -EH -u "vagrant" "$@";
-}
-
-hack_avoid_gyp_errors() {
-  # Without this, we get a bunch of errors when installing `grunt-sass`:
-  # > node scripts/install.js
-  # Unable to save binary /usr/lib/node_modules/.../node-sass/.../linux-x64-48 :
-  # { Error: EACCES: permission denied, mkdir '/usr/lib/node_modules/... }
-  # Then, node-gyp generates tons of errors like:
-  # WARN EACCES user "root" does not have permission to access the dev dir
-  # "/usr/lib/node_modules/grunt-sass/node_modules/node-sass/.node-gyp/6.11.2"
-  # TODO: Why do child processes of `npm` run as `nobody`?
-  while [ ! -f /tmp/stop_gyp_hack ]; do
-    if [ -d /usr/lib/node_modules/grunt-sass/ ]; then
-      chown -R nobody:vagrant /usr/lib/node_modules/grunt-sass/
-    fi
-    sleep .2
-  done
-  rm /tmp/stop_gyp_hack
-}
-
 _header "Starting VVV Provisioner, this may take a few minutes"
 
 export DEBIAN_FRONTEND=noninteractive
@@ -186,7 +98,7 @@ export APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 export COMPOSER_ALLOW_SUPERUSER=1
 export COMPOSER_NO_INTERACTION=1
 
-source /srv/provision/provision-network-functions.sh
+. /srv/provision/provision-network-functions.sh
 
 # By storing the date now, we can calculate the duration of provisioning at the
 # end of this script.
@@ -259,6 +171,8 @@ _msg "Postfix"
 echo postfix postfix/main_mailer_type select Internet Site | debconf-set-selections
 echo postfix postfix/mailname string vvv | debconf-set-selections
 
+network_check
+
 _header "Configuring APT/DPKG"
 
 _msg "Loading APT keys"
@@ -267,14 +181,16 @@ for key in /srv/config/apt-keys/*; do
 done
 
 _msg "Setting up APT repositories"
-_apt_add_repo ppa:git-core/ppa
+rm -f /etc/apt/sources.list.d/git-core*
 install -Dm644 /srv/config/apt-source-append.list /etc/apt/sources.list.d/vvv-sources.list
 
 _msg "Updating sources"
+set -x
 _apt_update
 
 _msg "Installing packages"
 _apt_install ${apt_packages[@]}
+_apt_upgrade
 
 _msg "Cleaning up packages"
 apt-get autoremove -y
@@ -341,40 +257,36 @@ github_token=$(shyaml get-value general.github_token missing 2> /dev/null < /vag
 if [[ "$github_token" != "missing" ]]; then
   _msg "A personal GitHub token was found, configuring composer"
   echo "$github_token" >> /srv/provision/github.token
-  noroot composer config --global github-oauth.github.com "$github_token"
+  _composer config --global github-oauth.github.com "$github_token"
 fi
 
 # Update both Composer and any global packages. Updates to Composer are direct from
 # the master branch on its GitHub repository.
-if [[ -n "$(noroot composer --version --no-ansi | grep 'Composer version')" ]]; then
+if [[ -n "$(_composer --version | grep 'Composer version')" ]]; then
   export COMPOSER_HOME=/usr/local/src/composer
   _msg "Updating Composer..."
-  noroot composer --no-ansi global config bin-dir /usr/local/bin
-  noroot composer --no-ansi self-update --no-progress --no-interaction
-  noroot composer --no-ansi global require --no-update --no-progress --no-interaction \
+  _composer global config bin-dir /usr/local/bin
+  _composer self-update --no-progress --no-interaction
+  _composer global require --no-update --no-progress --no-interaction \
     phpunit/phpunit:6.* \
     phpunit/php-invoker:1.1.* \
     mockery/mockery:0.9.* \
     d11wtq/boris:v1.0.8
-  noroot composer --no-ansi global update --no-progress --no-interaction
+  _composer global update --no-progress --no-interaction
 fi
 
 _header "Grunt CLI"
 
+grunts=(grunt grunt-cli grunt-sass grunt-cssjanus grunt-rtscss)
 if command -v grunt >/dev/null 2>&1; then
-  npm update -g grunt grunt-cli --no-optional
-  hack_avoid_gyp_errors & npm update -g grunt-sass
-  touch /tmp/stop_gyp_hack
-  npm update -g grunt-cssjanus grunt-rtscss --no-optional
+  _npm update  ${grunts[@]}
 else
-  npm install -g grunt grunt-cli --no-optional
-  hack_avoid_gyp_errors & npm install -g grunt-sass --no-optional
-  touch /tmp/stop_gyp_hack
-  npm install -g grunt-cssjanus grunt-rtscss --no-optional
+  _npm install ${grunts[@]}
 fi
+unset grunts
 
 _header "WP-CLI"
-_msg "Downloading wp-cli nightly, see http://wp-cli.org"
+_msg "Downloading WP-CLI nightly, see http://wp-cli.org"
 _get https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli-nightly.phar \
   /usr/local/bin/wp
 _msg "WP-CLI bash completions"
@@ -476,7 +388,7 @@ _header "PHP_CodeSniffer"
 _msg "Install/Update PHP_CodeSniffer (phpcs), see https://github.com/squizlabs/PHP_CodeSniffer"
 _msg "Install/Update WordPress-Coding-Standards, sniffs for PHP_CodeSniffer, see https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards"
 cd /srv/provision/phpcs
-noroot composer update --no-ansi --no-autoloader --no-progress
+_composer update --no-autoloader
 
 # Link `phpcbf` and `phpcs` to the `/usr/local/bin` directory so
 # that it can be used on the host in an editor with matching rules
@@ -543,18 +455,17 @@ test -d /vagrant/certificates || ln -s /srv/certificates /vagrant
 _msg "Old nginx configs"
 find /etc/nginx/custom-sites -name 'vvv-auto-*.conf' -delete
 
-if [ -w /etc/hosts ]; then
-  _msg "/etc/hosts"
-  t=$(mktemp)
-  sed -n '/# vvv-auto$/!p' /etc/hosts > $t
-  echo "127.0.0.1 vvv # vvv-auto" >> $t
-  echo "127.0.0.1 vvv.test # vvv-auto" >> $t
-  if is_utility_installed core tideways; then
-    echo "127.0.0.1 tideways.vvv.test # vvv-auto" >> $t
-    echo "127.0.0.1 xhgui.vvv.test # vvv-auto" >> $t
-  fi
-  mv $t /etc/hosts
+_msg "/etc/hosts"
+t=$(mktemp)
+sed -n '/# vvv-auto$/!p' /etc/hosts > $t
+echo "127.0.0.1 vvv # vvv-auto" >> $t
+echo "127.0.0.1 vvv.test # vvv-auto" >> $t
+if is_utility_installed core tideways; then
+  echo "127.0.0.1 tideways.vvv.test # vvv-auto" >> $t
+  echo "127.0.0.1 xhgui.vvv.test # vvv-auto" >> $t
 fi
+install -Dm644 $t /etc/hosts
+_rm $t
 
 _header "Setting permissions"
 
