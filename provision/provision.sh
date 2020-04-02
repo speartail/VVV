@@ -73,6 +73,7 @@ apt_packages=(
   postfix
   python-pip
   python-setuptools
+  python-wheel
   subversion
   unzip
   zip
@@ -150,10 +151,9 @@ _get() {
 }
 
 set_perms() {
-  chown -R vagrant:vagrant /vagrant
-  chown -R vagrant:vagrant /usr/lib/node_modules/
-  # chown -R vagrant:www-data /usr/local/bin
-  chown -R vagrant:www-data /usr/local/src/composer
+  chown -R vagrant:vagrant  /vagrant /usr/lib/node_modules/
+  chown -R vagrant:www-data /usr/local/bin /usr/local/src/composer
+  chmod -R g+w              /usr/local/bin /usr/local/src/composer
   chmod -R +x /usr/local/bin/*
 }
 
