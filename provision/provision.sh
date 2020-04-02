@@ -180,8 +180,12 @@ for key in /srv/config/apt-keys/*; do
   apt-key add $key >/dev/null
 done
 
+for key in 0xF1656F24C74CD1D8 0xA1715D88E1DF1F24; do
+  apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 $key
+done
+
 _msg "Setting up APT repositories"
-rm -f /etc/apt/sources.list.d/git-core*
+rm -f /etc/apt/sources.list.d/git-core* # git-core is now in vvv-sources.list
 install -Dm644 /srv/config/apt-source-append.list /etc/apt/sources.list.d/vvv-sources.list
 
 _msg "Updating sources"
@@ -277,7 +281,7 @@ fi
 
 _header "Grunt CLI"
 
-grunts=(grunt grunt-cli grunt-sass grunt-cssjanus grunt-rtscss)
+grunts=(grunt grunt-cli grunt-sass grunt-cssjanus grunt-rtlcss)
 if command -v grunt >/dev/null 2>&1; then
   _npm update  ${grunts[@]}
 else

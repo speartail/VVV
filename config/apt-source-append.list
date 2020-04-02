@@ -13,10 +13,10 @@ deb http://ppa.launchpad.net/ondrej/php/ubuntu bionic main
 deb http://ppa.launchpad.net/varying-vagrant-vagrants/php/ubuntu bionic main
 # deb-src http://ppa.launchpad.net/varying-vagrant-vagrants/php/ubuntu bionic main
 
-# MariaDB 10.3 repository list - created 2018-06-19 13:36 UTC
+# MariaDB 10.4 repository list
 # https://downloads.mariadb.org/mariadb/repositories/
-deb [arch=amd64,i386] https://mirror.herrbischoff.com/mariadb/repo/10.3/ubuntu bionic main
-# deb-src https://mirror.herrbischoff.com/mariadb/repo/10.3/ubuntu bionic main
+deb [arch=amd64] http://ftp.osuosl.org/pub/mariadb/repo/10.4/ubuntu bionic main
+# deb-src [arch=amd64] http://ftp.osuosl.org/pub/mariadb/repo/10.4/ubuntu bionic main
 
 # Provides Node.js
 deb https://deb.nodesource.com/node_10.x bionic main

@@ -68,7 +68,7 @@ _npm() {
 }
 
 _composer() {
-  noroot composer --no-ansi --no-progress
+  noroot composer --no-ansi
 }
 
 set_perms() {
