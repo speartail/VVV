@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # provision.sh
 #
@@ -6,6 +6,8 @@
 # provisioning script whenever the commands `vagrant up`, `vagrant provision`,
 # or `vagrant reload` are used. It provides all of the default packages and
 # configurations included with Varying Vagrant Vagrants.
+
+set -eEuo pipefail
 
 GREEN="\033[38;5;2m"
 RED="\033[38;5;9m"
@@ -16,7 +18,7 @@ CRESET="\033[0m"
 start_seconds="$(date +%s)"
 
 # fix no tty warnings in provisioner logs
-sudo sed -i '/tty/!s/mesg n/tty -s \\&\\& mesg n/' /root/.profile
+sed -i '/tty/!s/mesg n/tty -s \\&\\& mesg n/' /root/.profile
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
@@ -27,14 +29,12 @@ export COMPOSER_NO_INTERACTION=1
 mkdir -p /vagrant
 
 # change ownership for /vagrant folder
-sudo chown -R vagrant:vagrant /vagrant
+chown -R vagrant:vagrant /vagrant
 
-rm -f /vagrant/provisioned_at
 rm -f /vagrant/version
 rm -f /vagrant/vvv-custom.yml
 rm -f /vagrant/config.yml
 
-touch /vagrant/provisioned_at
 echo $(date "+%Y.%m.%d_%H-%M-%S") > /vagrant/provisioned_at
 
 date_time=$(cat /vagrant/provisioned_at)
@@ -53,14 +53,9 @@ if [ -d /srv/provision/resources ]; then
 fi
 
 # copy over version and config files
-cp -f /home/vagrant/version /vagrant
-cp -f /srv/config/config.yml /vagrant
 VVV_CONFIG=/vagrant/config.yml
-
-
-sudo chmod 0644 /vagrant/config.yml
-sudo chmod 0644 /vagrant/version
-sudo chmod 0644 /vagrant/provisioned_at
+install -m0644 -t /vagrant /home/vagrant/version /srv/config/config.yml
+chmod 0644 /vagrant/provisioned_at
 
 # symlink the certificates folder for older site templates compat
 if [[ ! -d /vagrant/certificates ]]; then
@@ -227,16 +222,15 @@ git_ppa_check() {
   # apt-get does not have latest version of git,
   # so let's the use ppa repository instead.
   #
-  if grep -Rq "^deb.*ppa:git-core/ppa" /etc/apt/sources.list.d/*.list
-  then
+  if grep -Rq "^deb.*ppa:git-core/ppa" /etc/apt/sources.list.d/*.list; then
     # Install prerequisites.
     echo " * Setting up Git PPA pre-requisites"
-    sudo apt-get install -y python-software-properties software-properties-common &>/dev/null
+    apt-get install -y python-software-properties software-properties-common &>/dev/null
     # Add ppa repo.
     echo " * Adding ppa:git-core/ppa repository"
-    sudo add-apt-repository -y ppa:git-core/ppa &>/dev/null
+    add-apt-repository -y ppa:git-core/ppa &>/dev/null
     # Update apt-get info.
-    sudo apt-get update &>/dev/null
+    apt-get update &>/dev/null
     echo " * git-core/ppa added"
   else
     echo " * git-core/ppa already present, skipping"
@@ -250,76 +244,46 @@ noroot() {
 cleanup_terminal_splash() {
   # Dastardly Ubuntu tries to be helpful and suggest users update packages
   # themselves, but this can break things
-  if [[ -f /etc/update-motd.d/00-header ]]; then
-    rm /etc/update-motd.d/00-header
-  fi
-  if [[ -f /etc/update-motd.d/10-help-text ]]; then
-    rm /etc/update-motd.d/10-help-text
-  fi
-  if [[ -f /etc/update-motd.d/51-cloudguest ]]; then
-    rm /etc/update-motd.d/51-cloudguest
-  fi
-  if [[ -f /etc/update-motd.d/50-landscape-sysinfo ]]; then
-    rm /etc/update-motd.d/50-landscape-sysinfo
-  fi
-  if [[ -f /etc/update-motd.d/80-livepatch ]]; then
-    rm /etc/update-motd.d/80-livepatch
-  fi
-  if [[ -f /etc/update-motd.d/90-updates-available ]]; then
-    rm /etc/update-motd.d/90-updates-available
-  fi
-  if [[ -f /etc/update-motd.d/91-release-upgrade ]]; then
-    rm /etc/update-motd.d/91-release-upgrade
-  fi
-  if [[ -f /etc/update-motd.d/95-hwe-eol ]]; then
-    rm /etc/update-motd.d/95-hwe-eol
-  fi
-  if [[ -f /etc/update-motd.d/98-cloudguest ]]; then
-    rm /etc/update-motd.d/98-cloudguest
-  fi
-  cp "/srv/config/update-motd.d/00-vvv-bash-splash" "/etc/update-motd.d/00-vvv-bash-splash"
-  chmod +x /etc/update-motd.d/00-vvv-bash-splash
+  rm -f /etc/update-motd.d/*
+  install -m755 -t /etc/update-motd.d /srv/config/update-motd.d/00-vvv-bash-splash
 }
 
 profile_setup() {
-  echo " * Setting ownership of files in /home/vagrant to vagrant"
-  chown -R vagrant:vagrant /home/vagrant/
-  # Copy custom dotfiles and bin file for the vagrant user from local
-  echo " * Copying /srv/config/bash_profile                      to /home/vagrant/.bash_profile"
-  rm -f "/home/vagrant/.bash_profile"
-  noroot cp -f "/srv/config/bash_profile" "/home/vagrant/.bash_profile"
-
-  echo " * Copying /srv/config/bash_aliases                      to /home/vagrant/.bash_aliases"
-  rm -f "/home/vagrant/.bash_aliases"
-  noroot cp -f "/srv/config/bash_aliases" "/home/vagrant/.bash_aliases"
-
+  # root
   echo " * Copying /srv/config/bash_aliases                      to $HOME/.bash_aliases"
   rm -f "$HOME/.bash_aliases"
   cp -f "/srv/config/bash_aliases" "$HOME/.bash_aliases"
   . "$HOME/.bash_aliases"
 
+  # vagrant
+  # Copy custom dotfiles and bin file for the vagrant user from local
+  echo " * Copying /srv/config/bash_profile                      to /home/vagrant/.bash_profile"
+  cp --remove-destination -f "/srv/config/bash_profile" "/home/vagrant/.bash_profile"
+
+  echo " * Copying /srv/config/bash_aliases                      to /home/vagrant/.bash_aliases"
+  cp --remove-destination -f "/srv/config/bash_aliases" "/home/vagrant/.bash_aliases"
+
   echo " * Copying /srv/config/vimrc                             to /home/vagrant/.vimrc"
-  rm -f "/home/vagrant/.vimrc"
-  noroot cp -f "/srv/config/vimrc" "/home/vagrant/.vimrc"
+  cp --remove-destination -f "/srv/config/vimrc" "/home/vagrant/.vimrc"
 
   if [[ ! -d "/home/vagrant/.subversion" ]]; then
-    noroot mkdir -p "/home/vagrant/.subversion"
+    mkdir -p "/home/vagrant/.subversion"
   fi
 
   echo " * Copying /srv/config/subversion-servers                to /home/vagrant/.subversion/servers"
-  rm -f /home/vagrant/.subversion/servers
-  noroot cp "/srv/config/subversion-servers" "/home/vagrant/.subversion/servers"
+  cp --remove-destination "/srv/config/subversion-servers" "/home/vagrant/.subversion/servers"
 
   echo " * Copying /srv/config/subversion-config                 to /home/vagrant/.subversion/config"
-  rm -f /home/vagrant/.subversion/config
-  noroot cp "/srv/config/subversion-config" "/home/vagrant/.subversion/config"
+  cp --remove-destination "/srv/config/subversion-config" "/home/vagrant/.subversion/config"
 
   # If a bash_prompt file exists in the VVV config/ directory, copy to the VM.
   if [[ -f "/srv/config/bash_prompt" ]]; then
     echo " * Copying /srv/config/bash_prompt to /home/vagrant/.bash_prompt"
-    rm -f /home/vagrant/.bash_prompt
-    noroot cp "/srv/config/bash_prompt" "/home/vagrant/.bash_prompt"
+    cp --remove-destination "/srv/config/bash_prompt" "/home/vagrant/.bash_prompt"
   fi
+
+  echo " * Setting ownership of files in /home/vagrant to vagrant"
+  chown -R vagrant:vagrant /home/vagrant
 
   echo " * Copying /srv/config/ssh_known_hosts to /etc/ssh/ssh_known_hosts"
   cp -f /srv/config/ssh_known_hosts /etc/ssh/ssh_known_hosts
@@ -379,9 +343,8 @@ package_install() {
   fi
   id mysql
 
-  mkdir -p "/etc/mysql/conf.d"
   echo " * Copying /srv/config/mysql-config/vvv-core.cnf to /etc/mysql/conf.d/vvv-core.cnf"
-  cp -f "/srv/config/mysql-config/vvv-core.cnf" "/etc/mysql/conf.d/vvv-core.cnf"
+  install -D -t /etc/mysql/conf.d /srv/config/mysql-config/vvv-core.cnf
 
   # Postfix
   #
@@ -407,39 +370,9 @@ package_install() {
   # Before running `apt-get update`, we should add the public keys for
   # the packages that we are installing from non standard sources via
   # our appended apt source.list
-  if [[ ! $( echo "${keys}" | grep 'nginx') ]]; then
-    # Retrieve the Nginx signing key from nginx.org
-    echo " * Applying Nginx signing key..."
-    apt-key add /srv/config/apt-keys/nginx_signing.key
-  fi
-
-  if [[ ! $( echo "${keys}" | grep 'Ondřej') ]]; then
-    # Apply the PHP signing key
-    echo " * Applying the Ondřej PHP signing key..."
-    apt-key add /srv/config/apt-keys/ondrej_keyserver_ubuntu.key
-  fi
-
-  if [[ ! $( echo "${keys}" | grep 'Varying Vagrant Vagrants') ]]; then
-    # Apply the VVV signing key
-    echo " * Applying the Varying Vagrant Vagrants mirror signing key..."
-    apt-key add /srv/config/apt-keys/varying-vagrant-vagrants_keyserver_ubuntu.key
-  fi
-
-  if [[ ! $( echo "${keys}" | grep 'MariaDB') ]]; then
-    # Apply the MariaDB signing keyg
-    echo " * Applying the MariaDB signing key..."
-    apt-key add /srv/config/apt-keys/mariadb.key
-  fi
-
-  if [[ ! $( echo "${keys}" | grep 'git-lfs') ]]; then
-    # Apply the PackageCloud signing key which signs git lfs
-    echo " * Applying the PackageCloud Git-LFS signing key..."
-    apt-key add /srv/config/apt-keys/git-lfs.key
-  fi
-  if [[ ! $( echo "${keys}" | grep 'MongoDB 4.0') ]]; then
-    echo " * Applying the MongoDB 4.0 signing key..."
-    apt-key add /srv/config/apt-keys/mongo-server-4.0.asc
-  fi
+  for key in /srv/config/apt-keys/*.key; do
+    apt-key add $key || true
+  done
 
   # Update all of the package references before installing anything
   echo " * Running apt-get update..."
@@ -482,6 +415,12 @@ tools_install() {
   # Disable xdebug before any composer provisioning.
   sh /srv/config/homebin/xdebug_off
 
+  # Shyaml
+  #
+  # Used for passing custom parameters to the bash provisioning scripts
+  echo " * Installing Shyaml for bash provisioning.."
+  pip install shyaml
+
   echo " * Checking for NVM"
   if [[ -f ~/.nvm ]]; then
     echo " * .nvm folder found, switching to system node, and removing NVM folders"
@@ -516,7 +455,6 @@ tools_install() {
   fi
 
   echo " * Making sure the composer cache is not owned by root"
-  mkdir -p /usr/local/src/composer
   mkdir -p /usr/local/src/composer/cache
   chown -R vagrant:www-data /usr/local/src/composer
   chown -R vagrant:www-data /usr/local/bin
@@ -524,21 +462,18 @@ tools_install() {
   # COMPOSER
 
   echo " * Checking for Composer"
-  exists_composer="$(which composer)"
-  if [[ "/usr/local/bin/composer" != "${exists_composer}" ]]; then
+  if [[ ! -f /usr/local/bin/composer ]]; then
     echo " * Installing Composer..."
     curl -sS "https://getcomposer.org/installer" | php
-    chmod +x "composer.phar"
-    mv "composer.phar" "/usr/local/bin/composer"
+    install -Dm755 /home/vagrant/composer.phar /usr/local/bin/composer
   fi
 
-  github_token=$(shyaml get-value general.github_token 2> /dev/null < ${VVV_CONFIG})
-  if [[ ! -z $github_token ]]; then
+  github_token=$(shyaml get-value general.github_token missing 2> /dev/null < ${VVV_CONFIG})
+  if [[ "$github_token" != "missing" ]]; then
     rm /srv/provision/github.token
     echo "$github_token" >> /srv/provision/github.token
     echo " * A personal GitHub token was found, configuring composer"
-    ghtoken=$(cat /srv/provision/github.token)
-    noroot composer config --global github-oauth.github.com "$ghtoken"
+    noroot composer config --global github-oauth.github.com "$github_token"
     echo " * Your personal GitHub token is set for Composer."
   fi
 
@@ -546,30 +481,15 @@ tools_install() {
   # the master branch on its GitHub repository.
   if [[ -n "$(noroot composer --version --no-ansi | grep 'Composer version')" ]]; then
     echo " * Updating Composer..."
-    COMPOSER_HOME=/usr/local/src/composer noroot composer --no-ansi global config bin-dir /usr/local/bin
-    COMPOSER_HOME=/usr/local/src/composer noroot composer --no-ansi self-update --no-progress --no-interaction
-    COMPOSER_HOME=/usr/local/src/composer noroot composer --no-ansi global require --no-update --no-progress --no-interaction phpunit/phpunit:6.* phpunit/php-invoker:1.1.* mockery/mockery:0.9.* d11wtq/boris:v1.0.8
-    COMPOSER_HOME=/usr/local/src/composer noroot composer --no-ansi global update --no-progress --no-interaction
+    export COMPOSER_HOME=/usr/local/src/composer
+    noroot composer --no-ansi global config bin-dir /usr/local/bin
+    noroot composer --no-ansi global config bin-dir /usr/local/bin
+    noroot composer --no-ansi self-update --no-progress --no-interaction
+    noroot composer --no-ansi global require --no-update --no-progress --no-interaction phpunit/phpunit:6.* phpunit/php-invoker:1.1.* mockery/mockery:0.9.* d11wtq/boris:v1.0.8
+    noroot composer --no-ansi global update --no-progress --no-interaction
+    unset COMPOSER_HOME
   fi
 
-
-  function install_grunt() {
-    echo " * Installing Grunt CLI"
-    npm install -g grunt grunt-cli --no-optional
-    hack_avoid_gyp_errors & npm install -g grunt-sass --no-optional; touch /tmp/stop_gyp_hack
-    npm install -g grunt-cssjanus --no-optional
-    npm install -g grunt-rtlcss --no-optional
-    echo " * Installed Grunt CLI"
-  }
-
-  function update_grunt() {
-    echo " * Updating Grunt CLI"
-    npm update -g grunt grunt-cli --no-optional
-    hack_avoid_gyp_errors & npm update -g grunt-sass; touch /tmp/stop_gyp_hack
-    npm update -g grunt-cssjanus --no-optional
-    npm update -g grunt-rtlcss --no-optional
-    echo " * Updated Grunt CLI"
-  }
   # Grunt
   #
   # Install or Update Grunt based on current state.  Updates are direct
@@ -592,10 +512,21 @@ tools_install() {
     rm /tmp/stop_gyp_hack
   }
   chown -R vagrant:vagrant /usr/lib/node_modules/
-  if command -v grunt >/dev/null 2>&1; then
-    update_grunt
+
+  echo " * Installing/updating Grunt CLI"
+  if type -p grunt >/dev/null; then
+    npm install -g grunt grunt-cli --no-optional
+    hack_avoid_gyp_errors & npm install -g grunt-sass --no-optional
+    touch /tmp/stop_gyp_hack
+    npm install -g grunt-cssjanus --no-optional
+    npm install -g grunt-rtlcss --no-optional
+    echo " * Installed Grunt CLI"
   else
-    install_grunt
+    npm update -g grunt grunt-cli --no-optional
+    hack_avoid_gyp_errors & npm update -g grunt-sass; touch /tmp/stop_gyp_hack
+    npm update -g grunt-cssjanus --no-optional
+    npm update -g grunt-rtlcss --no-optional
+    echo " * Updated Grunt CLI"
   fi
 
   # Graphviz
@@ -604,12 +535,6 @@ tools_install() {
   # config and actual path.
   echo " * Adding graphviz symlink for Webgrind..."
   ln -sf "/usr/bin/dot" "/usr/local/bin/dot"
-
-  # Shyaml
-  #
-  # Used for passing custom parameters to the bash provisioning scripts
-  echo " * Installing Shyaml for bash provisioning.."
-  sudo pip install shyaml
 }
 
 nginx_setup() {
@@ -638,34 +563,24 @@ nginx_setup() {
 
   # Used to ensure proper services are started on `vagrant up`
   echo " * Copying /srv/config/init/vvv-start.conf               to /etc/init/vvv-start.conf"
-  cp -f "/srv/config/init/vvv-start.conf" "/etc/init/vvv-start.conf"
+  install -D -t /etc/init /srv/config/init/vvv-start.conf
 
   # Copy nginx configuration from local
-  echo " * Copying /srv/config/nginx-config/nginx.conf           to /etc/nginx/nginx.conf"
-  cp -f "/srv/config/nginx-config/nginx.conf" "/etc/nginx/nginx.conf"
+  echo " * Installing /srv/config/nginx-config/{nginx,nginx-wp-common}.conf           to /etc/nginx"
+  install -D -t /etc/nginx /srv/config/nginx-config/{nginx,nginx-wp-common}.conf
 
-  echo " * Copying /srv/config/nginx-config/nginx-wp-common.conf to /etc/nginx/nginx-wp-common.conf"
-  cp -f "/srv/config/nginx-config/nginx-wp-common.conf" "/etc/nginx/nginx-wp-common.conf"
+  mkdir -p /etc/nginx/upstreams
 
-  if [[ ! -d "/etc/nginx/upstreams" ]]; then
-    mkdir -p "/etc/nginx/upstreams/"
-  fi
   echo " * Copying /srv/config/nginx-config/php7.2-upstream.conf to /etc/nginx/upstreams/php72.conf"
   cp -f "/srv/config/nginx-config/php7.2-upstream.conf" "/etc/nginx/upstreams/php72.conf"
 
-  if [[ ! -d "/etc/nginx/custom-sites" ]]; then
-    mkdir -p "/etc/nginx/custom-sites/"
-  fi
+  mkdir -p /etc/nginx/custom-sites
+
   echo " * Rsync'ing /srv/config/nginx-config/sites/             to /etc/nginx/custom-sites"
   rsync -rvzh --delete "/srv/config/nginx-config/sites/" "/etc/nginx/custom-sites/"
 
-  if [[ ! -d "/etc/nginx/custom-utilities" ]]; then
-    mkdir -p "/etc/nginx/custom-utilities/"
-  fi
-
-  if [[ ! -d "/etc/nginx/custom-dashboard-extensions" ]]; then
-    mkdir -p "/etc/nginx/custom-dashboard-extensions/"
-  fi
+  mkdir -p /etc/nginx/custom-utilities
+  mkdir -p /etc/nginx/custom-dashboard-extensions
 
   rm -rf /etc/nginx/custom-{dashboard-extensions,utilities}/*
 
@@ -677,112 +592,82 @@ nginx_setup() {
 
 phpfpm_setup() {
   # Copy php-fpm configuration from local
-  echo " * Copying /srv/config/php-config/php7.2-fpm.conf   to /etc/php/7.2/fpm/php-fpm.conf"
-  cp -f "/srv/config/php-config/php7.2-fpm.conf" "/etc/php/7.2/fpm/php-fpm.conf"
+  echo " * Installing PHP-FPM configuration"
 
-  echo " * Copying /srv/config/php-config/php7.2-www.conf   to /etc/php/7.2/fpm/pool.d/www.conf"
-  cp -f "/srv/config/php-config/php7.2-www.conf" "/etc/php/7.2/fpm/pool.d/www.conf"
+  cp -f /srv/config/php-config/php7.2-fpm.conf /etc/php/7.2/fpm/php-fpm.conf
+  cp -f /srv/config/php-config/php7.2-www.conf /etc/php/7.2/fpm/pool.d/www.conf
+  cp -f /srv/config/php-config/php7.2-custom.ini /etc/php/7.2/fpm/conf.d/php-custom.ini
+  cp -f /srv/config/php-config/opcache.ini /etc/php/7.2/fpm/conf.d/
+  install -D -t /etc/php/7.2/mods-available /srv/config/php-config/{mailhog,xdebug}.ini
 
-  echo " * Copying /srv/config/php-config/php7.2-custom.ini to /etc/php/7.2/fpm/conf.d/php-custom.ini"
-  cp -f "/srv/config/php-config/php7.2-custom.ini" "/etc/php/7.2/fpm/conf.d/php-custom.ini"
-
-  echo " * Copying /srv/config/php-config/opcache.ini       to /etc/php/7.2/fpm/conf.d/opcache.ini"
-  cp -f "/srv/config/php-config/opcache.ini" "/etc/php/7.2/fpm/conf.d/opcache.ini"
-
-  echo " * Copying /srv/config/php-config/xdebug.ini        to /etc/php/7.2/mods-available/xdebug.ini"
-  cp -f "/srv/config/php-config/xdebug.ini" "/etc/php/7.2/mods-available/xdebug.ini"
-
-  echo " * Copying /srv/config/php-config/mailhog.ini       to /etc/php/7.2/mods-available/mailhog.ini"
-  cp -f "/srv/config/php-config/mailhog.ini" "/etc/php/7.2/mods-available/mailhog.ini"
-
-  if [[ -f "/etc/php/7.2/mods-available/mailcatcher.ini" ]]; then
-    echo " * Cleaning up mailcatcher.ini from a previous install"
-    rm -f /etc/php/7.2/mods-available/mailcatcher.ini
-  fi
+  echo " * Cleaning up mailcatcher.ini from a previous install (if it exists)"
+  rm -f /etc/php/7.2/mods-available/mailcatcher.ini
 
   # Copy memcached configuration from local
-  echo " * Copying /srv/config/memcached-config/memcached.conf to /etc/memcached.conf and /etc/memcached_default.conf"
-  cp -f "/srv/config/memcached-config/memcached.conf" "/etc/memcached.conf"
-  cp -f "/srv/config/memcached-config/memcached.conf" "/etc/memcached_default.conf"
+  echo " * Installing memcached configuration"
+  cp -f /srv/config/memcached-config/memcached.conf /etc/memcached.conf
+  cp -f /srv/config/memcached-config/memcached.conf /etc/memcached_default.conf
 }
 
 mailhog_setup() {
-  if [[ -f "/etc/init/mailcatcher.conf" ]]; then
-    echo " * Cleaning up old mailcatcher.conf"
-    rm -f /etc/init/mailcatcher.conf
-  fi
+  echo " * Cleaning up old mailcatcher.conf (if it exists)"
+  rm -f /etc/init/mailcatcher.conf
 
   if [[ ! -e /usr/local/bin/mailhog ]]; then
     echo " * Installing MailHog"
     curl --silent -L -o /usr/local/bin/mailhog https://github.com/mailhog/MailHog/releases/download/v1.0.0/MailHog_linux_amd64
-    chmod +x /usr/local/bin/mailhog
   fi
+
   if [[ ! -e /usr/local/bin/mhsendmail ]]; then
     echo " * Installing MHSendmail"
     curl --silent -L -o /usr/local/bin/mhsendmail https://github.com/mailhog/mhsendmail/releases/download/v0.2.0/mhsendmail_linux_amd64
-    chmod +x /usr/local/bin/mhsendmail
   fi
 
-  if [[ ! -e /etc/systemd/system/mailhog.service ]]; then
-    echo " * Mailhog service file missing, setting up"
-    # Make it start on reboot
-    tee /etc/systemd/system/mailhog.service <<EOL
+  chmod +x /usr/local/bin/*
+
+  echo " * Mailhog service unit"
+  tee /etc/systemd/system/mailhog.service <<EOL
 [Unit]
 Description=MailHog
 After=network.service vagrant.mount
+
 [Service]
 Type=simple
-ExecStart=/usr/bin/env /usr/local/bin/mailhog > /dev/null 2>&1 &
+ExecStart=/usr/local/bin/mailhog
+Restart=on-failure
+
 [Install]
 WantedBy=multi-user.target
 EOL
-  fi
 
-  # Start on reboot
-  echo " * Enabling MailHog Service"
-  systemctl enable mailhog
-
-  echo " * Starting MailHog Service"
-  systemctl start mailhog
+  echo " * Enabling and starting MailHog"
+  systemctl enable mailhog --now
 }
 
 mysql_setup() {
   # If MariaDB/MySQL is installed, go through the various imports and service tasks.
   local exists_mysql
 
-  exists_mysql="$(service mysql status)"
-  if [[ "mysql: unrecognized service" != "${exists_mysql}" ]]; then
+  if systemctl --quiet is-active mysql; then
     echo -e "\n * Setting up database configuration file links..."
 
+    echo " * Install MySQL configuration"
     # Copy mysql configuration from local
-    cp "/srv/config/mysql-config/my.cnf" "/etc/mysql/my.cnf"
-    echo " * Copied /srv/config/mysql-config/my.cnf               to /etc/mysql/my.cnf"
+    cp /srv/config/mysql-config/my.cnf /etc/mysql/my.cnf
+    cp /srv/config/mysql-config/root-my.cnf /home/vagrant/.my.cnf
 
-    cp -f  "/srv/config/mysql-config/root-my.cnf" "/home/vagrant/.my.cnf"
-    chmod 0644 "/home/vagrant/.my.cnf"
-    echo " * Copied /srv/config/mysql-config/root-my.cnf          to /home/vagrant/.my.cnf"
-    
     echo " * Setting the default database password for the root user"
     mysqladmin -u root password root
 
-    # MySQL gives us an error if we restart a non running service, which
-    # happens after a `vagrant halt`. Check to see if it's running before
-    # deciding whether to start or restart.
-    if [[ "mysql stop/waiting" == "${exists_mysql}" ]]; then
-      echo " * Starting the mysql service"
-      service mysql start
-    else
-      echo " * Restarting mysql service"
-      service mysql restart
-    fi
+    systemctl restart mysql
 
     # IMPORT SQL
     #
     # Create the databases (unique to system) that will be imported with
     # the mysqldump files located in database/backups/
-    if [[ -f "/srv/database/init-custom.sql" ]]; then
+    if [[ -e /srv/database/init-custom.sql ]]; then
       echo " * Running custom init-custom.sql under the root user..."
-      mysql -u "root" -p"root" < "/srv/database/init-custom.sql"
+      mysql -u "root" -p"root" < /srv/database/init-custom.sql
       echo " * init-custom.sql has run"
     else
       echo -e "\n * No custom MySQL scripting found in database/init-custom.sql, skipping..."
@@ -790,15 +675,24 @@ mysql_setup() {
 
     # Setup MySQL by importing an init file that creates necessary
     # users and databases that our vagrant setup relies on.
-    mysql -u "root" -p"root" < "/srv/database/init.sql"
+    mysql -u "root" -p"root" < /srv/database/init.sql
     echo " * Initial MySQL prep..."
 
     # Process each mysqldump SQL file in database/backups to import
     # an initial data set for MySQL.
-    "/srv/database/import-sql.sh"
+    /srv/database/import-sql.sh
   else
     echo -e "\n * MySQL is not installed. No databases imported."
   fi
+}
+
+services_disable() {
+  # DISABLE SERVICES
+  #
+  echo -e "\n * Disabling unneeded services..."
+  for s in atd cron lxcfs lxd ntp rsyslog unattended-upgrades; do
+    systemctl disable $s --now
+  done
 }
 
 services_restart() {
@@ -806,10 +700,9 @@ services_restart() {
   #
   # Make sure the services we expect to be running are running.
   echo -e "\n * Restarting services..."
-  service nginx restart
-  service memcached restart
-  service mailhog restart
-  service ntp restart
+  for s in nginx memcached mailhog; do
+    systemctl restart $s
+  done
 
   # Disable PHP Xdebug module by default
   echo " * Disabling XDebug PHP extension"
@@ -820,7 +713,9 @@ services_restart() {
   phpenmod -s ALL mailhog
 
   # Restart all php-fpm versions
-  find /etc/init.d/ -name "php*-fpm" -exec bash -c 'sudo service "$(basename "$0")" restart' {} \;
+  for s in $(systemctl --all | grep -e 'php.*fpm' | awk '{print $1}'); do
+    systemctl restart $s
+  done
 
   # Add the vagrant user to the www-data group so that it has better access
   # to PHP and Nginx related files.
@@ -842,7 +737,7 @@ wp_cli() {
     echo " * Downloading wp-cli nightly, see http://wp-cli.org"
     curl -sO https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli-nightly.phar
     chmod +x wp-cli-nightly.phar
-    sudo mv wp-cli-nightly.phar /usr/local/bin/wp
+    mv wp-cli-nightly.phar /usr/local/bin/wp
 
     echo " * Grabbing WP CLI bash completions"
     # Install bash completions
@@ -874,39 +769,37 @@ php_codesniff() {
 
 wpsvn_check() {
   echo " * Searching for SVN repositories that need upgrading"
+
   # Get all SVN repos.
-  svn_repos=$(find /srv/www -maxdepth 5 -type d -name '.svn');
+  for repo in $(find /srv/www -maxdepth 5 -type d -name '.svn'); do
+    # Test to see if an svn upgrade is needed on this repo.
+    svn_test=$( svn status -u "$repo" 2>&1 );
 
-  # Do we have any?
-  if [[ -n $svn_repos ]]; then
-    for repo in $svn_repos; do
-      # Test to see if an svn upgrade is needed on this repo.
-      svn_test=$( svn status -u "$repo" 2>&1 );
-
-      if [[ "$svn_test" == *"svn upgrade"* ]]; then
-        # If it is needed do it!
-        echo " * Upgrading svn repository: ${repo}"
-        svn upgrade "${repo/%\.svn/}"
-      fi;
-    done
-  fi;
+    if [[ "$svn_test" == *"svn upgrade"* ]]; then
+      # If it is needed do it!
+      echo " * Upgrading svn repository: ${repo}"
+      svn upgrade "${repo/%\.svn/}"
+    fi;
+  done
 }
 
 cleanup_vvv(){
   echo " * Cleaning up Nginx configs"
   # Kill previously symlinked Nginx configs
-  find /etc/nginx/custom-sites -name 'vvv-auto-*.conf' -exec rm {} \;
+  find /etc/nginx/custom-sites -name 'vvv-auto-*.conf' -delete
 
-  # Cleanup the hosts file
-  echo " * Cleaning the virtual machine's /etc/hosts file..."
-  sed -n '/# vvv-auto$/!p' /etc/hosts > /tmp/hosts
-  echo "127.0.0.1 vvv # vvv-auto" >> "/etc/hosts"
-  echo "127.0.0.1 vvv.test # vvv-auto" >> "/etc/hosts"
-  if is_utility_installed core tideways; then
-    echo "127.0.0.1 tideways.vvv.test # vvv-auto" >> "/etc/hosts"
-    echo "127.0.0.1 xhgui.vvv.test # vvv-auto" >> "/etc/hosts"
+  if [ -w /etc/hosts ]; then
+    # Cleanup the hosts file
+    echo " * Cleaning the virtual machine's /etc/hosts file..."
+    sed -n '/# vvv-auto$/!p' /etc/hosts > /tmp/hosts
+    echo "127.0.0.1 vvv # vvv-auto" >> "/etc/hosts"
+    echo "127.0.0.1 vvv.test # vvv-auto" >> "/etc/hosts"
+    if is_utility_installed core tideways; then
+      echo "127.0.0.1 tideways.vvv.test # vvv-auto" >> "/etc/hosts"
+      echo "127.0.0.1 xhgui.vvv.test # vvv-auto" >> "/etc/hosts"
+    fi
+    mv /tmp/hosts /etc/hosts
   fi
-  mv /tmp/hosts /etc/hosts
 }
 
 ### SCRIPT
@@ -927,6 +820,8 @@ if ! package_install; then
   echo -e "${RED} ! Main packages check and install failed, halting provision${CRESET}"
   exit 1
 fi
+
+services_disable
 
 tools_install
 nginx_setup
