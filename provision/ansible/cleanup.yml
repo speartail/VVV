@@ -1,0 +1,12 @@
+---
+
+- name: disable unneeded services
+  service:
+    name: '{{ item }}'
+    enabled: no
+    state: stopped
+  with_items:
+    - atd
+    - cron
+    - rsyslog
+    - unattended-upgrades

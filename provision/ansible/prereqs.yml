@@ -1,0 +1,35 @@
+---
+- name: install prerequisites for ansible
+  apt:
+    pkg:
+      - python
+      - python-apt
+      - python-pip
+      - python-setuptools
+      - python-wheel
+    state: latest
+
+- name: install utilities using PIP
+  pip:
+    name:
+      - shyaml
+
+- name: download and install utilities
+  get_url:
+    url: '{{ item.src }}'
+    dest: /usr/local/bin/{{ item.name }}
+    checksum: sha256:{{ item.sha256 }}
+    mode: '0755'
+
+  with_items:
+    - {
+        src: 'https://beyondgrep.com/ack-v3.3.1',
+        name: 'ack',
+        sha256: 'e4fd286d5a56f459147d562660d2f8bc4548f2f1e2d8cf3a5265b70beedbfc87'
+      }
+
+- name: purge junk we do not want/need
+  apt:
+    pkg:
+      - landscape-common
+    state: absent

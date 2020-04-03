@@ -1,0 +1,37 @@
+---
+- tasks:
+  - name: download and install mailhog
+    get_url:
+      url: '{{ item.src }}'
+      dest: /usr/local/bin/{{ item.name }}
+      checksum: sha256:{{ item.sha256 }}
+      mode: '0755'
+
+    with_items:
+      - {
+          src: 'https://github.com/mailhog/MailHog/releases/download/v1.0.0/MailHog_linux_amd64',
+          name: 'mailhog',
+          sha256: 'ba921e04438e176c474d533447ae64707ffcdd1230f0153f86cb188d348f25c0'
+        }
+      - {
+          src: 'https://github.com/mailhog/mhsendmail/releases/download/v0.2.0/mhsendmail_linux_amd64',
+          name: 'mhsendmail',
+          sha256: 'be5acdc8ce3f380dcb9d02caed77c845affa9a447d0860961529b699dcd0c613'
+        }
+
+  - name: configure mailhog
+    copy:
+      src: /srv/config/mailhog/mailhog.service
+      dest: /etc/systemd/system/mailhog.service
+      mode: 0644
+    notify: restart mailhog
+
+  - name: start/enable mailhog
+    service:
+      name: mailhog
+      ensure: started
+      enabled: yes
+
+  handlers:
+    - name: restart mailhog
+      service: name=mailhog state=restarted

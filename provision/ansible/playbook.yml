@@ -1,0 +1,66 @@
+---
+- hosts: all
+
+  tasks:
+    - include: prereqs.yml
+
+    - name: configure custom repos
+      apt_repository:
+        repo: '{{ item }}'
+        state: present
+      with_items:
+        - ppa:nginx/mainline
+        - ppa:ondrej/php
+        - ppa:varying-vagrant-vagrants/php
+        - deb https://mirror.herrbischoff.com/mariadb/repo/10.4/ubuntu bionic main
+        - deb https://deb.nodesource.com/node_10.x bionic main
+        - deb https://packagecloud.io/github/git-lfs/ubuntu/ bionic main
+
+    - name: install system software
+      apt:
+        pkg:
+          - mariadb-server
+          - memcached
+          - nginx
+
+          - php7.2-cli
+          - php7.2-fpm
+          - php7.2-common
+          - php7.2-dev
+          # Extra PHP modules that we find useful
+          - php-bcmath
+          - php-curl
+          - php-gd
+          - php-imagick
+          - php-imap
+          - php-json
+          - php-mbstring
+          - php-memcache
+          - php-memcached
+          - php-mysql
+          - php-pear
+          - php-soap
+          - php-ssh2
+          - php-xdebug
+          - php-xml
+          - php-yaml
+          - php-zip
+        state: latest
+
+    - include: mysql.yml
+
+    - include: nginx.yml
+
+    - include: cleanup.yml
+
+- include: mailhog.yml
+
+  handlers:
+    - name: restart mailhog
+      service: name=mailhog state=restarted
+
+    - name: restart mysql
+      service: name=mysql state=restarted
+
+    - name: restart nginx
+      service: name=nginx state=restarted

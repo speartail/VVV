@@ -1,0 +1,38 @@
+---
+- name: mysql files
+  copy:
+    remote_src: yes
+    src: /srv/config/mysql-config/{{ item }}
+    dest: /etc/mysql/conf.d/{{ item }}
+  with_items:
+    - vvv-core.cnf
+  notify:
+    - restart mysql
+
+- name: mysql group
+  group:
+    name: mysql
+    gid: 9001
+    state: present
+
+- name: mysql user
+  user:
+    name: mysql
+    uid: 9001
+    state: present
+    group: mysql
+    groups:
+      - vboxsf
+
+- name: mysql file ownership
+  file:
+    path: /var/lib/mysql
+    owner: mysql
+    group: mysql
+    recurse: yes
+
+- name: mysql service
+  service:
+    name: mysql
+    ensure: started
+    enabled: yes
