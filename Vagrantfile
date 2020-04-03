@@ -6,6 +6,8 @@ Vagrant.require_version '>= 2.2.4'
 require 'yaml'
 require 'fileutils'
 
+MYSQL_ID = 9001
+
 def virtualbox_path
   @vboxmanage_path = nil
   if Vagrant::Util::Platform.windows? || Vagrant::Util::Platform.cygwin?
@@ -290,15 +292,15 @@ if show_logo
     end
   end
 
-  if defined? vvv_config['general']['db_share_type']
-    if vvv_config['general']['db_share_type'] != true
-      platform << 'shared_db_folder_disabled'
-    else
-      platform << 'shared_db_folder_enabled'
-    end
-  else
-    platform << 'shared_db_folder_default'
-  end
+  platform << if defined? vvv_config['general']['db_share_type']
+                if vvv_config['general']['db_share_type'] != true
+                  'shared_db_folder_disabled'
+                else
+                  'shared_db_folder_enabled'
+                            end
+              else
+                'shared_db_folder_default'
+              end
 
   virtualbox_version = 'N/A'
 
@@ -527,17 +529,17 @@ Vagrant.configure('2') do |config|
   end
   if use_db_share == true
     # Map the MySQL Data folders on to mounted folders so it isn't stored inside the VM
-    config.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: 9001, group: 9001, mount_options: ['dmode=775', 'fmode=664']
+    config.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: MYSQL_ID, group: MYSQL_ID, mount_options: ['dmode=775', 'fmode=664']
 
     # The Parallels Provider does not understand "dmode"/"fmode" in the "mount_options" as
     # those are specific to Virtualbox. The folder is therefore overridden with one that
     # uses corresponding Parallels mount options.
     config.vm.provider :parallels do |_v, override|
-      override.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: 9001, group: 9001, mount_options: []
+      override.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: MYSQL_ID, group: MYSQL_ID, mount_options: []
     end
     # Neither does the HyperV provider
     config.vm.provider :hyperv do |_v, override|
-      override.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: 9001, group: 9001, mount_options: ['dir_mode=0775', 'file_mode=0664']
+      override.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: MYSQL_ID, group: MYSQL_ID, mount_options: ['dir_mode=0775', 'file_mode=0664']
     end
   end
 
@@ -684,9 +686,9 @@ Vagrant.configure('2') do |config|
   # provison-pre.sh acts as a pre-hook to our default provisioning script. Anything that
   # should run before the shell commands laid out in provision.sh (or your provision-custom.sh
   # file) should go in this script. If it does not exist, no extra provisioning will run.
-  if File.exist?(File.join(vagrant_dir, 'provision', 'provision-pre.sh'))
-    config.vm.provision 'pre', type: 'shell', keep_color: true, path: File.join('provision', 'provision-pre.sh')
-  end
+  # if File.exist?(File.join(vagrant_dir, 'provision', 'provision-pre.sh'))
+  #   config.vm.provision 'pre', type: 'shell', keep_color: true, path: File.join('provision', 'provision-pre.sh')
+  # end
 
   # provision.sh or provision-custom.sh
   #
@@ -694,10 +696,24 @@ Vagrant.configure('2') do |config|
   # provision directory. If it is detected that a provision-custom.sh script has been
   # created, that is run as a replacement. This is an opportunity to replace the entirety
   # of the provisioning provided by default.
-  if File.exist?(File.join(vagrant_dir, 'provision', 'provision-custom.sh'))
-    config.vm.provision 'custom', type: 'shell', keep_color: true, path: File.join('provision', 'provision-custom.sh')
-  else
-    config.vm.provision 'default', type: 'shell', keep_color: true, path: File.join('provision', 'provision.sh')
+  # if File.exist?(File.join(vagrant_dir, 'provision', 'provision-custom.sh'))
+  #   config.vm.provision 'custom', type: 'shell', keep_color: true, path: File.join('provision', 'provision-custom.sh')
+  # else
+  #   config.vm.provision 'default', type: 'shell', keep_color: true, path: File.join('provision', 'provision.sh')
+  # end
+
+  config.vm.provision :ansible_local do |ansible|
+    ansible.become = true
+    ansible.playbook = '/srv/provision/ansible/playbook.yml'
+    ansible.compatibility_mode = '2.0'
+    ansible.install_mode = :default
+    ansible.version = :latest
+
+    #   ansible.extra_vars = {
+    #     mysql = {
+    #       id: MYSQL_ID,
+    #     }
+    #   }
   end
 
   # Provision the dashboard that appears when you visit vvv.test
