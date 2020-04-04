@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# -*- mode: ruby -*-
 # vi: set ft=ruby ts=2 sw=2 et:
 Vagrant.require_version '>= 2.2.4'
 require 'yaml'
@@ -846,3 +845,5 @@ Vagrant.configure('2') do |config|
     trigger.on_error = :continue
   end
 end
+
+# -*- mode: ruby -*-
