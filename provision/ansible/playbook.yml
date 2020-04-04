@@ -47,13 +47,14 @@
           - php-zip
         state: latest
 
-    - include: mysql.yml
+    # - include: mysql.yml
 
-    - include: nginx.yml
+    # - include: nginx.yml
 
-    - include: cleanup.yml
+    # - include: cleanup.yml
 
-- include: mailhog.yml
+- name: include mailhog
+  import_playbook: mailhog.yml
 
   handlers:
     - name: restart mailhog
