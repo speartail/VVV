@@ -7,6 +7,16 @@ require 'fileutils'
 
 MYSQL_ID = 9001
 
+class Hash
+  def symbolize_keys!
+    keys.each do |k|
+      ks    = k.respond_to?(:to_sym) ? k.to_sym : k
+      self[ks] = delete k
+      self[ks].symbolize_keys! if self[ks].kind_of? Hash
+    end
+  end
+end
+
 def virtualbox_path
   @vboxmanage_path = nil
   if Vagrant::Util::Platform.windows? || Vagrant::Util::Platform.cygwin?
@@ -147,15 +157,16 @@ if (File.directory?(old_db_backup_dir) == true) && (File.directory?(new_db_backu
 end
 
 begin
-  vvv_config = YAML.load_file(vvv_config_file)
+  # vvv_config = JSON.parse(YAML.load_file(vvv_config_file)) #, symbolize_keys: true)
+  vvv_config = YAML.load_file(vvv_config_file).symbolize_keys!
   unless vvv_config['sites'].is_a? Hash
     vvv_config['sites'] = {}
 
     puts "#{red}config/config.yml is missing a sites section.#{creset}\n\n"
   end
 rescue StandardError => e
-  puts "#{red}config/config.yml isn't a valid YAML file.#{creset}\n\n"
-  puts "#{red}VVV cannot be executed!#{creset}\n\n"
+  #puts "#{red}config/config.yml isn't a valid YAML file.#{creset}\n\n"
+  #puts "#{red}VVV cannot be executed!#{creset}\n\n"
 
   warn e.message
   exit
@@ -236,7 +247,7 @@ defaults['memory'] = 2048
 defaults['cores'] = 1
 defaults['provider'] = 'virtualbox'
 # This should rarely be overridden, so it's not included in the config/default-config.yml file.
-defaults['private_network_ip'] = '192.168.50.4'
+defaults['private_network_ip'] = vvv_config['provider'] == 'virtualbox' ? '192.168.50.4' : '192.168.122.4'
 
 vvv_config['vm_config'] = defaults.merge(vvv_config['vm_config'])
 vvv_config['hosts'] = vvv_config['hosts'].uniq
@@ -354,6 +365,10 @@ Vagrant.configure('2') do |config|
     v.name = File.basename(vagrant_dir) + '_' + (Digest::SHA256.hexdigest vagrant_dir)[0..10]
   end
 
+  config.vm.provider :libvirt do |v|
+    v.qemu_use_session = true
+  end
+
   # Configuration options for the Parallels provider.
   config.vm.provider :parallels do |v|
     v.update_guest_tools = true
@@ -408,7 +423,7 @@ Vagrant.configure('2') do |config|
   # This box is provided by Ubuntu vagrantcloud.com and is a nicely sized
   # box containing the Ubuntu 18.04 Bionic 64 bit release. Once this box is downloaded
   # to your host computer, it is cached for future use under the specified box name.
-  config.vm.box = 'ubuntu/bionic64'
+  config.vm.box = 'generic/ubuntu1804'
   # config.vm.box = "varying-vagrant-vagrants/ubuntu-18.04"
 
   # If we're at a contributor day, switch the base box to the prebuilt one
