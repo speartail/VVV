@@ -29,9 +29,7 @@ end
 begin
   vvv_config_file = File.join(vagrant_dir, 'config/config.yml')
   old_vvv_config = File.join(vagrant_dir, 'vvv-custom.yml')
-  puts 'before Options.new'
   vvv_config = Options.new vvv_config_file, old_vvv_config
-  puts 'after Options.new'
   unless vvv_config[:sites].is_a?(Hash)
     puts "#{red}config/config.yml is missing a sites section.#{creset}\n\n"
   end
@@ -42,8 +40,6 @@ rescue StandardError => e
   warn e.message
   exit
 end
-
-puts 'foobar'
 
 # Show the initial splash screen
 
@@ -72,8 +68,6 @@ if File.directory?(old_db_backup_dir) && !File.directory?(new_db_backup_dir)
   FileUtils.mv(old_db_backup_dir, new_db_backup_dir)
 end
 
-vvv_config[:hosts] += ['vvv.test']
-
 vvv_config[:sites].each_pair do |site, args|
   if args.is_a? String
     repo = args
@@ -84,25 +78,25 @@ vvv_config[:sites].each_pair do |site, args|
   args = {} unless args.is_a? Hash
 
   defaults = {}
-  defaults['repo'] = false
-  defaults['vm_dir'] = "/srv/www/#{site}"
-  defaults['local_dir'] = File.join(vagrant_dir, 'www', site)
-  defaults['branch'] = 'master'
-  defaults['skip_provisioning'] = false
-  defaults['allow_customfile'] = false
-  defaults['nginx_upstream'] = 'php'
-  defaults['hosts'] = []
+  defaults[:repo] = false
+  defaults[:vm_dir] = "/srv/www/#{site}"
+  defaults[:local_dir] = File.join(vagrant_dir, 'www', site.to_s)
+  defaults[:branch] = 'master'
+  defaults[:skip_provisioning] = false
+  defaults[:allow_customfile] = false
+  defaults[:nginx_upstream] = 'php'
+  defaults[:hosts] = []
 
-  vvv_config[:sites][site] = defaults.merge(args)
+  vvv_config.sites[site] = defaults.merge(args)
 
-  unless vvv_config[:sites][site][:skip_provisioning]
+  unless vvv_config.sites[site][:skip_provisioning]
     site_host_paths = Dir.glob(Array.new(4) { |i| vvv_config[:sites][site][:local_dir] + '/*' * (i + 1) + '/vvv-hosts' })
     vvv_config[:sites][site][:hosts] += site_host_paths.map do |path|
       lines = File.readlines(path).map(&:chomp)
       lines.grep(/\A[^#]/)
     end.flatten
 
-    vvv_config[:hosts] += vvv_config.dig(:sites, site, :hosts)
+    vvv_config[:hosts] += vvv_config.sites.dig(site, :hosts)
   end
   vvv_config[:sites][site].delete(:hosts)
 end
@@ -112,10 +106,10 @@ vvv_config['utility-sources'.to_sym].each_pair do |name, args|
 
   repo = args
   args = {}
-  args['repo'] = repo
-  args['branch'] = 'master'
+  args[:repo] = repo
+  args[:branch] = 'master'
 
-  vvv_config['utility-sources'][name] = args
+  vvv_config['utility-sources'.to_sym][name] = args
 end
 
 dashboard_defaults = {}
@@ -123,14 +117,11 @@ dashboard_defaults[:repo] = 'https://github.com/Varying-Vagrant-Vagrants/dashboa
 dashboard_defaults[:branch] = 'master'
 vvv_config[:dashboard] = dashboard_defaults.merge(vvv_config[:dashboard])
 
-unless vvv_config['utility-sources'].key?('core')
-  vvv_config['utility-sources']['core'] = {}
-  vvv_config['utility-sources']['core']['repo'] = 'https://github.com/Varying-Vagrant-Vagrants/vvv-utilities.git'
-  vvv_config['utility-sources']['core']['branch'] = 'master'
+unless vvv_config['utility-sources'.to_sym].key?(:core)
+  vvv_config['utility-sources'.to_sym][:core] = {}
+  vvv_config['utility-sources'.to_sym][:core][:repo] = 'https://github.com/Varying-Vagrant-Vagrants/vvv-utilities.git'
+  vvv_config['utility-sources'.to_sym][:core][:branch] = 'master'
 end
-
-# Create a global variable to use in functions and classes
-# $vvv_config = vvv_config
 
 if vvv_config.vm_config.dig(:box)
   puts "Custom Box: Box overriden via config/config.yml , this won't take effect until a destroy + reprovision happens"
@@ -153,15 +144,14 @@ if vvv_config.show_logo?
   puts splashsecond
 end
 
-# Override or set the vagrant provider.
-ENV['VAGRANT_DEFAULT_PROVIDER'] = vvv_config.provider
-
-ENV['LC_ALL'] = 'C.UTF-8'
-
 Vagrant.configure('2') do |config|
   # Store the current version of Vagrant for use in conditionals when dealing
   # with possible backward compatible issues.
   vagrant_version = Vagrant::VERSION.sub(/^v/, '')
+
+  config.nfs.functional = false
+
+  # config.vm.name = vvv_config.name
 
   config.vm.provider :virtualbox do |v|
     v.customize [:modifyvm, :id, '--uartmode1', 'file', File.join(vagrant_dir, 'log/ubuntu-bionic-18.04-cloudimg-console.log')]
@@ -195,6 +185,11 @@ Vagrant.configure('2') do |config|
     v.qemu_use_session = true
     v.memory = vvv_config.memory
     v.cpus = vvv_config.cpus
+    v.video_type = 'qxl'
+    v.channel type: 'unix', target_name: 'org.qemu.guest_agent.0', target_type: 'virtio'
+    v.channel type: 'spicevmc', target_name: 'com.redhat.spice.0', target_type: 'virtio'
+    v.watchdog model: 'i6300esb', action: 'reset'
+    v.management_network_autostart = true
   end
 
   config.vm.provider :parallels do |v|
@@ -210,7 +205,7 @@ Vagrant.configure('2') do |config|
   end
 
   # Auto Download Vagrant plugins, supported from Vagrant 2.2.0
-  unless Vagrant.has_plugin?('vagrant-hostsupdater')
+  if vvv_config.use_hosts_updater? && !Vagrant.has_plugin?('vagrant-hostsupdater')
     if File.file?(File.join(vagrant_dir, 'vagrant-hostsupdater.gem'))
       system('vagrant plugin install ' + File.join(vagrant_dir, 'vagrant-hostsupdater.gem'))
       File.delete(File.join(vagrant_dir, 'vagrant-hostsupdater.gem'))
@@ -254,9 +249,9 @@ Vagrant.configure('2') do |config|
   # Warning: This plugin only resizes up, not down, so don't set this to less than 10GB,
   # and if you need to downsize, be sure to destroy and reprovision.
   #
-  if (disksize = vvv_config.dig('vagrant-plugins'.to_sym, :disksize)) && defined?(Vagrant::Disksize)
+  if vvv_config.use_disksize?
     config.vm.provider :virtualbox do |_v, override|
-      override.disksize.size = disksize
+      override.disksize.size = vvv_config.vm_config.dig('vagrant-plugins'.to_sym, :disksize)
     end
   end
 
@@ -274,10 +269,15 @@ Vagrant.configure('2') do |config|
   # should be changed. If more than one VM is running through VirtualBox, including other
   # Vagrant machines, different subnets should be used for each.
   #
-  config.vm.network :private_network, id: 'vvv_primary', ip: vvv_config.vm_config.dig(:private_ip)
+  config.vm.network :private_network, id: 'vvv_primary', ip: vvv_config.private_ip
 
-  config.vm.provider :hyperv do |_v, override|
-    override.vm.network :private_network, id: 'vvv_primary', ip: nil
+  config.vm.provider :libvirt do |_v, override|
+    override.vm.network :private_network, id: 'vvv_primary',
+                                          ip: vvv_config.private_ip,
+                                          dev: 'virbr0',
+                                          mode: 'bridge',
+                                          type: 'bridge',
+                                          autostart: true
   end
 
   # Public Network (disabled)
@@ -315,66 +315,69 @@ Vagrant.configure('2') do |config|
 
   # Disable the default synced folder to avoid overlapping mounts
   config.vm.synced_folder '.', '/vagrant', disabled: true
+
+  use_db_share = vvv_config.general.dig(:db_share_type)
+
   config.vm.provision 'file', source: "#{vagrant_dir}/version", destination: '/home/vagrant/version'
 
-  # /srv/database/
-  #
-  # If a database directory exists in the same directory as your Vagrantfile,
-  # a mapped directory inside the VM will be created that contains these files.
-  # This directory is used to maintain default database scripts as well as backed
-  # up MariaDB/MySQL dumps (SQL files) that are to be imported automatically on vagrant up
-  config.vm.synced_folder 'database/sql/', '/srv/database'
+  config.vm.provider :virtualbox do |v|
+    # /srv/database/
+    #
+    # If a database directory exists in the same directory as your Vagrantfile,
+    # a mapped directory inside the VM will be created that contains these files.
+    # This directory is used to maintain default database scripts as well as backed
+    # up MariaDB/MySQL dumps (SQL files) that are to be imported automatically on vagrant up
 
-  use_db_share = vvv_config.dig(:general, :db_share_type)
+    v.synced_folder 'database/sql/', '/srv/database'
 
-  if use_db_share
-    # Map the MySQL Data folders on to mounted folders so it isn't stored inside the VM
-    config.vm.synced_folder 'database/data/', '/var/lib/mysql', **vvv_config.db_mount_opts
-  end
+    if use_db_share
+      # Map the MySQL Data folders on to mounted folders so it isn't stored inside the VM
+      v.synced_folder 'database/data/', '/var/lib/mysql', **vvv_config.db_mount_opts
+    end
 
-  # /srv/config/
-  #
-  # If a server-conf directory exists in the same directory as your Vagrantfile,
-  # a mapped directory inside the VM will be created that contains these files.
-  # This directory is currently used to maintain various config files for php and
-  # nginx as well as any pre-existing database files.
-  config.vm.synced_folder 'config/', '/srv/config'
+    # /srv/config/
+    #
+    # If a server-conf directory exists in the same directory as your Vagrantfile,
+    # a mapped directory inside the VM will be created that contains these files.
+    # This directory is currently used to maintain various config files for php and
+    # nginx as well as any pre-existing database files.
+    v.synced_folder 'config/', '/srv/config'
 
-  # /srv/config/
-  #
-  # Map the provision folder so that utilities and provisioners can access helper scripts
-  config.vm.synced_folder 'provision/', '/srv/provision'
+    # /srv/config/
+    #
+    # Map the provision folder so that utilities and provisioners can access helper scripts
+    v.synced_folder 'provision/', '/srv/provision'
 
-  # /srv/certificates
-  #
-  # This is a location for the TLS certificates to be accessible inside the VM
-  config.vm.synced_folder 'certificates/', '/srv/certificates', create: true
+    # /srv/certificates
+    #
+    # This is a location for the TLS certificates to be accessible inside the VM
+    v.synced_folder 'certificates/', '/srv/certificates', create: true
 
-  # /var/log/
-  #
-  # If a log directory exists in the same directory as your Vagrantfile, a mapped
-  # directory inside the VM will be created for some generated log files.
-  config.vm.synced_folder 'log/memcached', '/var/log/memcached', owner: 'root', create: true, group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
-  config.vm.synced_folder 'log/nginx', '/var/log/nginx', owner: 'root', create: true, group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
-  config.vm.synced_folder 'log/php', '/var/log/php', create: true, owner: 'root', group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
-  config.vm.synced_folder 'log/provisioners', '/var/log/provisioners', create: true, owner: 'root', group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
+    # /var/log/
+    #
+    # If a log directory exists in the same directory as your Vagrantfile, a mapped
+    # directory inside the VM will be created for some generated log files.
+    v.synced_folder 'log/memcached', '/var/log/memcached', owner: 'root', create: true, group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
+    v.synced_folder 'log/nginx', '/var/log/nginx', owner: 'root', create: true, group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
+    v.synced_folder 'log/php', '/var/log/php', create: true, owner: 'root', group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
+    v.synced_folder 'log/provisioners', '/var/log/provisioners', create: true, owner: 'root', group: 'syslog', mount_options: ['dmode=777', 'fmode=666']
 
-  # /srv/www/
-  #
-  # If a www directory exists in the same directory as your Vagrantfile, a mapped directory
-  # inside the VM will be created that acts as the default location for nginx sites. Put all
-  # of your project files here that you want to access through the web server
-  config.vm.synced_folder 'www/', '/srv/www', owner: 'vagrant', group: 'www-data', mount_options: ['dmode=775', 'fmode=774']
+    # /srv/www/
+    #
+    # If a www directory exists in the same directory as your Vagrantfile, a mapped directory
+    # inside the VM will be created that acts as the default location for nginx sites. Put all
+    # of your project files here that you want to access through the web server
+    v.synced_folder 'www/', '/srv/www', owner: 'vagrant', group: 'www-data', mount_options: ['dmode=775', 'fmode=774']
 
-  vvv_config[:sites].each_pair do |site, args|
-    if args[:local_dir] != File.join(vagrant_dir, 'www', site)
-      config.vm.synced_folder args[:local_dir], args[:vm_dir], owner: 'vagrant', group: 'www-data', mount_options: ['dmode=775', 'fmode=774']
+    vvv_config[:sites].each_pair do |site, args|
+      if args[:local_dir] != File.join(vagrant_dir, 'www', site.to_s)
+        v.synced_folder args[:local_dir], args[:vm_dir], owner: 'vagrant', group: 'www-data', mount_options: ['dmode=775', 'fmode=774']
+      end
     end
   end
 
-  # The Parallels Provider does not understand "dmode"/"fmode" in the "mount_options" as
-  # those are specific to Virtualbox. The folder is therefore overridden with one that
-  # uses corresponding Parallels mount options.
+  # Parallels
+  # 1. does not understand "dmode"/"fmode" in the "mount_options"
   config.vm.provider :parallels do |_v, override|
     override.vm.synced_folder 'www/', '/srv/www',
                               owner: 'vagrant', group: 'www-data', mount_options: []
@@ -389,48 +392,76 @@ Vagrant.configure('2') do |config|
                               create: true, owner: 'root', group: 'syslog', mount_options: []
 
     if use_db_share
-      # Map the MySQL Data folders on to mounted folders so it isn't stored inside the VM
       override.vm.synced_folder 'database/data/', '/var/lib/mysql',
                                 create: true, owner: 112, group: 115, mount_options: []
     end
 
     vvv_config[:sites].each_pair do |site, args|
-      if args[:local_dir] != File.join(vagrant_dir, 'www', site)
+      if args[:local_dir] != File.join(vagrant_dir, 'www', site.to_s)
         override.vm.synced_folder args[:local_dir], args[:vm_dir],
                                   owner: 'vagrant', group: 'www-data', mount_options: []
       end
     end
   end
 
-  # The Hyper-V Provider does not understand "dmode"/"fmode" in the "mount_options" as
-  # those are specific to Virtualbox. Furthermore, the normal shared folders need to be
-  # replaced with SMB shares. Here we switch all the shared folders to us SMB and then
-  # override the www folder with options that make it Hyper-V compatible.
-  config.vm.provider :hyperv do |v, override|
-    v.vmname = File.basename(vagrant_dir) + '_' + (Digest::SHA256.hexdigest vagrant_dir)[0..10]
-
-    override.vm.synced_folder 'www/', '/srv/www', owner: 'vagrant', group: 'www-data', mount_options: ['dir_mode=0775', 'file_mode=0774']
+  # Hyper-V
+  # 1. does not understand "dmode"/"fmode" in the "mount_options"
+  # 2. the normal shared folders need to be replaced with SMB shares
+  config.vm.provider :hyperv do |_v, override|
+    override.vm.synced_folder 'www/', '/srv/www',
+                              owner: 'vagrant', group: 'www-data', mount_options: ['dir_mode=0775', 'file_mode=0774']
 
     if use_db_share == true
-      # Map the MySQL Data folders on to mounted folders so it isn't stored inside the VM
-      override.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: 112, group: 115, mount_options: ['dir_mode=0775', 'file_mode=0664']
+      override.vm.synced_folder 'database/data/', '/var/lib/mysql',
+                                create: true, owner: 112, group: 115, mount_options: ['dir_mode=0775', 'file_mode=0664']
     end
 
-    override.vm.synced_folder 'log/memcached', '/var/log/memcached', owner: 'root', create: true, group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
-    override.vm.synced_folder 'log/nginx', '/var/log/nginx', owner: 'root', create: true, group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
-    override.vm.synced_folder 'log/php', '/var/log/php', create: true, owner: 'root', group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
-    override.vm.synced_folder 'log/provisioners', '/var/log/provisioners', create: true, owner: 'root', group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
+    override.vm.synced_folder 'log/memcached', '/var/log/memcached',
+                              owner: 'root', create: true, group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
+    override.vm.synced_folder 'log/nginx', '/var/log/nginx',
+                              owner: 'root', create: true, group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
+    override.vm.synced_folder 'log/php', '/var/log/php',
+                              create: true, owner: 'root', group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
+    override.vm.synced_folder 'log/provisioners', '/var/log/provisioners',
+                              create: true, owner: 'root', group: 'syslog', mount_options: ['dir_mode=0777', 'file_mode=0666']
 
-    vvv_config['sites'].each do |site, args|
-      if args['local_dir'] != File.join(vagrant_dir, 'www', site)
-        override.vm.synced_folder args['local_dir'], args['vm_dir'], owner: 'vagrant', group: 'www-data', mount_options: ['dir_mode=0775', 'file_mode=0774']
+    vvv_config.sites.each_pair do |site, args|
+      if args[:local_dir] != File.join(vagrant_dir, 'www', site.to_s)
+        override.vm.synced_folder args[:local_dir], args[:vm_dir], owner: 'vagrant', group: 'www-data', mount_options: ['dir_mode=0775', 'file_mode=0774']
       end
     end
   end
 
-  # The VMware Provider does not understand "dmode"/"fmode" in the "mount_options" as
-  # those are specific to Virtualbox. The folder is therefore overridden with one that
-  # uses corresponding VMware mount options.
+  # libvirt
+  # 1. uses 9p
+  config.vm.provider :libvirt do |_v, override|
+    override.vm.synced_folder 'www/', '/srv/www',
+                              type: '9p', mount: false, owner: 'vagrant', group: 'www-data', mount_options: []
+
+    override.vm.synced_folder 'log/memcached', '/var/log/memcached',
+                              type: '9p', mount: false, owner: 'root', create: true, group: 'syslog', mount_options: []
+    override.vm.synced_folder 'log/nginx', '/var/log/nginx',
+                              type: '9p', mount: false, owner: 'root', create: true, group: 'syslog', mount_options: []
+    override.vm.synced_folder 'log/php', '/var/log/php',
+                              type: '9p', mount: false, create: true, owner: 'root', group: 'syslog', mount_options: []
+    override.vm.synced_folder 'log/provisioners', '/var/log/provisioners',
+                              type: '9p', mount: false, create: true, owner: 'root', group: 'syslog', mount_options: []
+
+    if use_db_share == true
+      override.vm.synced_folder 'database/data/', '/var/lib/mysql',
+                                type: '9p', mount: false, create: true, owner: 112, group: 115, mount_options: []
+    end
+
+    vvv_config.sites.each_pair do |site, args|
+      if args[:local_dir] != File.join(vagrant_dir, 'www', site.to_s)
+        override.vm.synced_folder args[:local_dir], args[:vm_dir],
+                                  type: '9p', mount: false, owner: 'vagrant', group: 'www-data', mount_options: []
+      end
+    end
+  end
+
+  # VMware
+  # 1. does not understand "dmode"/"fmode" in the "mount_options"
   config.vm.provider :vmware_desktop do |_v, override|
     override.vm.synced_folder 'www/', '/srv/www', owner: 'vagrant', group: 'www-data', mount_options: ['umask=002']
 
@@ -440,13 +471,12 @@ Vagrant.configure('2') do |config|
     override.vm.synced_folder 'log/provisioners', '/var/log/provisioners', create: true, owner: 'root', group: 'syslog', mount_options: ['umask=000']
 
     if use_db_share == true
-      # Map the MySQL Data folders on to mounted folders so it isn't stored inside the VM
       override.vm.synced_folder 'database/data/', '/var/lib/mysql', create: true, owner: 112, group: 115, mount_options: ['umask=000']
     end
 
-    vvv_config['sites'].each do |site, args|
-      if args['local_dir'] != File.join(vagrant_dir, 'www', site)
-        override.vm.synced_folder args['local_dir'], args['vm_dir'], owner: 'vagrant', group: 'www-data', mount_options: ['umask=002']
+    vvv_config.sites.each_pair do |site, args|
+      if args[:local_dir] != File.join(vagrant_dir, 'www', site.to_s)
+        override.vm.synced_folder args[:local_dir], args[:vm_dir], owner: 'vagrant', group: 'www-data', mount_options: ['umask=002']
       end
     end
   end
@@ -465,10 +495,10 @@ Vagrant.configure('2') do |config|
     puts "Finished running Custom Vagrant file with additional vagrant configs, resuming normal vagrantfile execution\n\n"
   end
 
-  vvv_config[:sites].each_pair do |site, args|
+  vvv_config.sites.each_pair do |site, args|
     next unless args[:allow_customfile]
 
-    Dir[File.join(args['local_dir'], '**', 'Customfile')].each do |file|
+    Dir[File.join(args[:local_dir], '**', 'Customfile')].each do |file|
       puts "Running additional site vagrant customfile at #{file}\n\n"
       eval(IO.read(file), binding)
     end
@@ -497,6 +527,12 @@ Vagrant.configure('2') do |config|
   #   config.vm.provision 'default', type: 'shell', keep_color: true, path: File.join('provision', 'provision.sh')
   # end
 
+  # we need this to run early to configure the 9P mounts
+  config.vm.provision :mount_9p,
+                      type: 'shell',
+                      path: File.join('provision', 'mount_9p.sh'),
+                      args: [].to_strings
+
   config.vm.provision :ansible_local do |ansible|
     ansible.become = true
     ansible.playbook = '/srv/provision/ansible/playbook.yml'
@@ -504,11 +540,9 @@ Vagrant.configure('2') do |config|
     ansible.install_mode = :default
     ansible.version = :latest
 
-    #   ansible.extra_vars = {
-    #     mysql = {
-    #       id: MYSQL_ID,
-    #     }
-    #   }
+    ansible.extra_vars = {
+      mysql: { id: 9001 }
+    }
   end
 
   # Provision the dashboard that appears when you visit vvv.test
@@ -517,29 +551,29 @@ Vagrant.configure('2') do |config|
                       keep_color: true,
                       path: File.join('provision', 'provision-dashboard.sh'),
                       args: [
-                        vvv_config['dashboard']['repo'],
-                        vvv_config['dashboard']['branch']
-                      ]
+                        vvv_config.dig(:dashboard, :repo),
+                        vvv_config.dig(:dashboard, :branch)
+                      ].to_strings
 
-  vvv_config['utility-sources'.to_sym].each do |name, args|
+  vvv_config['utility-sources'.to_sym].each_pair do |name, args|
     config.vm.provision "utility-source-#{name}",
                         type: 'shell',
                         keep_color: true,
                         path: File.join('provision', 'provision-utility-source.sh'),
                         args: [
                           name,
-                          args[:repo].to_s,
+                          args[:repo],
                           args[:branch]
-                        ]
+                        ].to_strings
   end
 
   vvv_config[:utilities].each_pair do |name, utilities|
     utilities = {} unless utilities.is_a? Enumerable
+    if utilities.include? 'tideways'
+      vvv_config[:hosts] += %w[tideways.vvv.test]
+      vvv_config[:hosts] += %w[xhgui.vvv.test]
+    end
     utilities.each do |utility|
-      if utility == 'tideways'
-        vvv_config[:hosts] += %w[tideways.vvv.test]
-        vvv_config[:hosts] += %w[xhgui.vvv.test]
-      end
       config.vm.provision "utility-#{name}-#{utility}",
                           type: 'shell',
                           keep_color: true,
@@ -547,7 +581,7 @@ Vagrant.configure('2') do |config|
                           args: [
                             name,
                             utility
-                          ]
+                          ].to_strings
     end
   end
 
@@ -560,12 +594,12 @@ Vagrant.configure('2') do |config|
                         path: File.join('provision', 'provision-site.sh'),
                         args: [
                           site,
-                          args['repo'].to_s,
-                          args['branch'],
-                          args['vm_dir'],
-                          args['skip_provisioning'].to_s,
-                          args['nginx_upstream']
-                        ]
+                          args[:repo],
+                          args[:branch],
+                          args[:vm_dir],
+                          args[:skip_provisioning],
+                          args[:nginx_upstream]
+                        ].to_strings
   end
 
   # provision-post.sh acts as a post-hook to the default provisioning. Anything that should
@@ -573,7 +607,11 @@ Vagrant.configure('2') do |config|
   # put into this file. This provides a good opportunity to install additional packages
   # without having to replace the entire default provisioning script.
   if File.exist?(File.join(vagrant_dir, 'provision', 'provision-post.sh'))
-    config.vm.provision 'post', type: 'shell', keep_color: true, path: File.join('provision', 'provision-post.sh')
+    config.vm.provision 'post',
+                        type: 'shell',
+                        keep_color: true,
+                        path: File.join('provision', 'provision-post.sh'),
+                        args: [].compact.map(&:to_s)
   end
 
   # Local Machine Hosts
@@ -585,7 +623,7 @@ Vagrant.configure('2') do |config|
   #
   # By default, we'll include the domains set up by VVV through the vvv-hosts file
   # located in the www/ directory and in config/config.yml.
-  if vvv_config.use_hosts_updater
+  if vvv_config.use_hosts_updater?
 
     # Pass the found host names to the hostsupdater plugin so it can perform magic.
     config.hostsupdater.aliases = vvv_config[:hosts]

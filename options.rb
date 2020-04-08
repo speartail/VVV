@@ -1,23 +1,40 @@
 # frozen_string_literal: true
 
+require 'forwardable'
+
+class Array
+  def to_strings
+    compact.map(&:to_s)
+  end
+end
+
 class Hash
   def symbolize_keys!
-    keys.each do |k|
-      ks = k.is_a?(String) ? k.to_sym : k
-      self[ks] = delete k
-      self[ks].symbolize_keys! if self[ks].is_a? Hash
+    h = map do |k, v|
+      v_sym = if v.instance_of? Hash
+                v.symbolize_keys!
+              else
+                v
+              end
+
+      [k.to_sym, v_sym]
     end
+    Hash[h]
   end
 end
 
 class Options
-  %i[hyperv libvirt virtualbox vmware].each do |p|
+  extend Forwardable
+
+  def_delegators :@config, :dig
+
+  %i[hyperv libvirt parallels virtualbox vmware].each do |p|
     define_method "#{p}?".to_sym do
       provider == p
     end
   end
 
-  %i[general vm_config].each do |i|
+  %i[general sites vm_config].each do |i|
     define_method i do
       @config[i]
     end
@@ -26,24 +43,16 @@ class Options
   def initialize(new_file, old_file)
     migrate_old_config_file_maybe!(new_file, old_file)
 
-    puts 'Options: before loading YAML'
     begin
       @config = YAML.load_file(new_file).symbolize_keys!
-      puts 'Options: done loading YAML'
     rescue StandardError => e
       puts e.message
     end
 
-    puts 'Options: setting defaults'
-
     set_defaults!
-
-    puts 'Options: done setting defaults'
   end
 
   def [](key)
-    puts "unknown key: #{key}" unless @config.key?(key.to_sym)
-
     @config[key.to_sym]
   end
 
@@ -72,11 +81,12 @@ class Options
   end
 
   def hosts
-    vm_config.dig(:hosts)&.uniq
+    [vm_config.dig(:hosts),
+     'vvv.test'].flatten.compact.uniq
   end
 
   def provider
-    vm_config.dig(:provider) || :virtualbox
+    (vm_config.dig(:provider) || ENV.fetch('VAGRANT_DEFAULT_PROVIDER', :virtualbox)).to_sym
   end
 
   def db_mount_opts(dmode = '0755', fmode = '0644')
@@ -92,7 +102,13 @@ class Options
   def provider_version; end
 
   def private_ip
-    virtualbox? ? '192.168.50.4' : '192.168.112.4'
+    if hyperv?
+      nil
+    elsif virtualbox?
+      '192.168.50.4'
+    else
+      '192.168.112.4'
+    end
   end
 
   def show_logo?
@@ -102,7 +118,11 @@ class Options
     %w[up resume status provision reload].include? ARGV[0]
   end
 
-  def use_hosts_updater
+  def use_disksize?
+    defined?(Vagrant::Disksize) && vm_config.dig('vagrant-plugins'.to_sym, :disksize)
+  end
+
+  def use_hosts_updater?
     defined?(VagrantPlugins::HostsUpdater) && !ENV.key?('SKIP_HOSTS_UPDATER')
   end
 

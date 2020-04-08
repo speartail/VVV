@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -eEuo pipefail
+
+vagrant up --provision --provider=libvirt
