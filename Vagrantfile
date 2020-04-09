@@ -1,3 +1,4 @@
+# coding: utf-8
 # frozen_string_literal: true
 
 # vi: set ft=ruby ts=2 sw=2 et:
@@ -183,8 +184,12 @@ Vagrant.configure('2') do |config|
 
   config.vm.provider :libvirt do |v|
     v.qemu_use_session = true
+    v.machine_type = 'q35'
     v.memory = vvv_config.memory
     v.cpus = vvv_config.cpus
+    v.disk_bus = 'virtio'
+    v.nic_model_type = 'virtio'
+    v.graphics_type = 'spice'
     v.video_type = 'qxl'
     v.channel type: 'unix', target_name: 'org.qemu.guest_agent.0', target_type: 'virtio'
     v.channel type: 'spicevmc', target_name: 'com.redhat.spice.0', target_type: 'virtio'
@@ -274,6 +279,7 @@ Vagrant.configure('2') do |config|
   config.vm.provider :libvirt do |_v, override|
     override.vm.network :private_network, id: 'vvv_primary',
                                           ip: vvv_config.private_ip,
+                                          model_type: 'virtio',
                                           dev: 'virbr0',
                                           mode: 'bridge',
                                           type: 'bridge',
@@ -568,8 +574,8 @@ Vagrant.configure('2') do |config|
   end
 
   vvv_config[:utilities].each_pair do |name, utilities|
-    utilities = {} unless utilities.is_a? Enumerable
-    if utilities.include? 'tideways'
+    utilities = {} unless utilities.is_a?(Hash) || utilities.is_a?(Array)
+    if utilities.respond_to?(:include?) && utilities.include? 'tideways'
       vvv_config[:hosts] += %w[tideways.vvv.test]
       vvv_config[:hosts] += %w[xhgui.vvv.test]
     end

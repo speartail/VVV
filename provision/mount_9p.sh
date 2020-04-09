@@ -11,7 +11,17 @@ else
   apt-get install -y 9mount
 fi
 
+_mount() {
+  local src=$1
+  local tgt=$2
 
-env | sort
+  test -d $tgt || mkdir -p $tgt
 
-exit 1
+  9mount -u virtio!${src} $tgt
+}
+
+_mount be4352993449f4e31cd7f75cdfc66c7 /srv/www
+_mount 5135071337af27114a2eac97b135f12 /var/log/memcached
+_mount 60a2763146cbcc44148210a3936abc6 /var/log/nginx
+_mount 0d82c342abf7a1e6b81b087ad94acb4 /var/log/php
+_mount 26e00b958049d2609286d50af30ca98 /var/log/provisioners
